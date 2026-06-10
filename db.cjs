@@ -15,6 +15,10 @@ function gerarId() {
 // Converte uma linha do banco no formato que a interface espera
 function mapearTransacao(row) {
   if (!row) return null;
+  // Compatibilidade: dados antigos não têm anoReferente — deriva do campo data (YYYY-MM-DD)
+  const anoReferente = row.anoReferente != null
+    ? row.anoReferente
+    : (row.data ? parseInt(row.data.split('-')[0], 10) : new Date().getFullYear());
   return {
     id: row.id,
     tipo: row.tipo,
@@ -26,7 +30,10 @@ function mapearTransacao(row) {
     comentario: row.comentario ?? '',
     formaPagamento: row.formaPagamento,
     mesReferente: row.mesReferente,
+    anoReferente,
     mesFim: row.mesFim ?? undefined,
+    anoFim: row.anoFim ?? undefined,
+    grupoId: row.grupoId ?? undefined,
     pago: !!row.pago,
     mesesPagos: row.mesesPagos ? JSON.parse(row.mesesPagos) : []
   };
@@ -50,11 +57,28 @@ function criarTabelas() {
       comentario     TEXT,
       formaPagamento TEXT,
       mesReferente   TEXT,
+      anoReferente   INTEGER,
       mesFim         TEXT,
+      anoFim         INTEGER,
+      grupoId        TEXT,
       pago           INTEGER DEFAULT 0,
       mesesPagos     TEXT DEFAULT '[]'
     );
   `);
+
+  // Migração para bancos já existentes: adiciona colunas novas se faltarem
+  const colunas = db.prepare('PRAGMA table_info(transacoes)').all().map(c => c.name);
+  const adicionar = {
+    anoReferente: 'INTEGER',
+    anoFim: 'INTEGER',
+    grupoId: 'TEXT'
+  };
+  for (const [nome, tipo] of Object.entries(adicionar)) {
+    if (!colunas.includes(nome)) {
+      db.exec(`ALTER TABLE transacoes ADD COLUMN ${nome} ${tipo}`);
+      console.log(`[DB] Coluna "${nome}" adicionada à tabela transacoes.`);
+    }
+  }
 }
 
 function semearCategorias() {
@@ -119,9 +143,9 @@ function inserirTransacao(t, idExistente) {
   const id = idExistente || gerarId();
   db.prepare(`
     INSERT INTO transacoes
-      (id, tipo, categoria, valor, parcelas, parcelaAtual, data, comentario, formaPagamento, mesReferente, mesFim, pago, mesesPagos)
+      (id, tipo, categoria, valor, parcelas, parcelaAtual, data, comentario, formaPagamento, mesReferente, anoReferente, mesFim, anoFim, grupoId, pago, mesesPagos)
     VALUES
-      (@id, @tipo, @categoria, @valor, @parcelas, @parcelaAtual, @data, @comentario, @formaPagamento, @mesReferente, @mesFim, @pago, @mesesPagos)
+      (@id, @tipo, @categoria, @valor, @parcelas, @parcelaAtual, @data, @comentario, @formaPagamento, @mesReferente, @anoReferente, @mesFim, @anoFim, @grupoId, @pago, @mesesPagos)
   `).run({
     id,
     tipo: t.tipo ?? null,
@@ -133,7 +157,10 @@ function inserirTransacao(t, idExistente) {
     comentario: t.comentario ?? '',
     formaPagamento: t.formaPagamento ?? null,
     mesReferente: t.mesReferente ?? null,
+    anoReferente: t.anoReferente ?? null,
     mesFim: t.mesFim ?? null,
+    anoFim: t.anoFim ?? null,
+    grupoId: t.grupoId ?? null,
     pago: t.pago ? 1 : 0,
     mesesPagos: JSON.stringify(t.mesesPagos ?? [])
   });
@@ -145,6 +172,7 @@ function atualizarTransacao(id, campos) {
   const permitidos = {
     mesesPagos: v => JSON.stringify(v),
     mesFim: v => v,
+    anoFim: v => v,
     pago: v => (v ? 1 : 0),
     comentario: v => v,
     categoria: v => v,
@@ -169,6 +197,12 @@ function atualizarTransacao(id, campos) {
 function excluirTransacao(id) {
   db.prepare('DELETE FROM transacoes WHERE id = ?').run(id);
   return { id };
+}
+
+// Exclui todas as parcelas de uma mesma compra (mesmo grupoId)
+function excluirGrupo(grupoId) {
+  const info = db.prepare('DELETE FROM transacoes WHERE grupoId = ?').run(grupoId);
+  return { grupoId, removidos: info.changes };
 }
 
 // ---- Categorias ----
@@ -198,6 +232,7 @@ module.exports = {
   inserirTransacao,
   atualizarTransacao,
   excluirTransacao,
+  excluirGrupo,
   listarCategorias,
   inserirCategoria,
   excluirCategoria,

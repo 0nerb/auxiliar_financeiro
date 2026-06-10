@@ -1,20 +1,18 @@
 import { useEffect, useState, useMemo } from 'react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
-  PieChart, Pie, Cell, ResponsiveContainer, 
-  BarChart, Bar 
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  PieChart, Pie, Cell, ResponsiveContainer,
+  BarChart, Bar
 } from 'recharts';
+import { MESES as LISTA_MESES, apareceNoPeriodo, anosDisponiveis } from './periodo';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF19A3', '#19FF5A', '#19E3FF'];
-const LISTA_MESES = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-];
 
 export default function Dashboard() {
   const [transacoes, setTransacoes] = useState([]);
   const [categorias, setCategorias] = useState([]);
   const [mesSelecionado, setMesSelecionado] = useState(new Date().getMonth());
+  const [anoSelecionado, setAnoSelecionado] = useState(new Date().getFullYear());
 
   useEffect(() => {
     let ativo = true;
@@ -36,6 +34,7 @@ export default function Dashboard() {
 
   // Nomes das categorias (dinâmicos) usados como séries dos gráficos
   const nomesCategorias = useMemo(() => categorias.map(c => c.nome), [categorias]);
+  const anosDisp = useMemo(() => anosDisponiveis(transacoes), [transacoes]);
 
   const dadosMensaisAgrupados = useMemo(() => {
     const base = LISTA_MESES.map(nomeMes => {
@@ -44,30 +43,17 @@ export default function Dashboard() {
       return obj;
     });
 
-    transacoes.forEach(t => {
-      const valor = parseFloat(t.valor);
-      
-      if (t.tipo === 'Gastos mensais fixos') {
-        const idxInicio = LISTA_MESES.indexOf(t.mesReferente);
-        const idxFim = t.mesFim ? LISTA_MESES.indexOf(t.mesFim) : 12;
-        
-        base.forEach((m, idx) => {
-          if (idx >= idxInicio && idx < idxFim) {
-            m[t.categoria] = (m[t.categoria] || 0) + valor;
-            m.valorTotal += valor;
-          }
-        });
-      } else {
-        // Agrupamento Estrito Sem Fracionamento em Memória
-        const idx = LISTA_MESES.indexOf(t.mesReferente);
-        if (idx !== -1) {
-          base[idx][t.categoria] = (base[idx][t.categoria] || 0) + valor;
-          base[idx].valorTotal += valor;
-        }
-      }
+    // Para cada mês do ano selecionado, soma o que cai naquele período (parcelas e fixas incluídas)
+    base.forEach((m, mesIdx) => {
+      transacoes.forEach(t => {
+        if (!apareceNoPeriodo(t, anoSelecionado, mesIdx)) return;
+        const valor = parseFloat(t.valor);
+        m[t.categoria] = (m[t.categoria] || 0) + valor;
+        m.valorTotal += valor;
+      });
     });
     return base;
-  }, [transacoes, nomesCategorias]);
+  }, [transacoes, nomesCategorias, anoSelecionado]);
 
   const dadosPizza = useMemo(() => {
     const mesData = dadosMensaisAgrupados[mesSelecionado];
@@ -79,7 +65,22 @@ export default function Dashboard() {
   return (
     <div className="dashboard-metrics">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem', marginTop: '1rem' }}>
-        
+
+        <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <h2 style={{ margin: 0 }}>Resumo de {anoSelecionado}</h2>
+          <label className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.75rem', width: 'auto', fontSize: '1.2rem' }}>
+            Ano:
+            <select
+              className="input-field"
+              style={{ width: '120px', fontSize: '1.1rem', padding: '0.5rem', marginTop: 0 }}
+              value={anoSelecionado}
+              onChange={e => setAnoSelecionado(parseInt(e.target.value, 10))}
+            >
+              {anosDisp.map(ano => <option key={ano} value={ano}>{ano}</option>)}
+            </select>
+          </label>
+        </div>
+
         <div className="card chart-container">
           <h2 style={{ marginBottom: '1rem' }}>Evolução Total de Gastos</h2>
           <ResponsiveContainer width="100%" height="100%">

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('api', {
   inserirTransacao: (transacao) => ipcRenderer.invoke('transacoes:inserir', transacao),
   atualizarTransacao: (id, campos) => ipcRenderer.invoke('transacoes:atualizar', id, campos),
   excluirTransacao: (id) => ipcRenderer.invoke('transacoes:excluir', id),
+  excluirGrupo: (grupoId) => ipcRenderer.invoke('transacoes:excluirGrupo', grupoId),
 
   // Categorias
   listarCategorias: () => ipcRenderer.invoke('categorias:listar'),

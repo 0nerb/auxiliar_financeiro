@@ -8,6 +8,7 @@ function registrarHandlers() {
   ipcMain.handle('transacoes:inserir', (_e, transacao) => db.inserirTransacao(transacao));
   ipcMain.handle('transacoes:atualizar', (_e, id, campos) => db.atualizarTransacao(id, campos));
   ipcMain.handle('transacoes:excluir', (_e, id) => db.excluirTransacao(id));
+  ipcMain.handle('transacoes:excluirGrupo', (_e, grupoId) => db.excluirGrupo(grupoId));
 
   ipcMain.handle('categorias:listar', () => db.listarCategorias());
   ipcMain.handle('categorias:inserir', (_e, nome) => db.inserirCategoria(nome));

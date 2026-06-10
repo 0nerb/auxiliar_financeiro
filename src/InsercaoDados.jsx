@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
+import { MESES, chavePago } from './periodo';
 
 const TIPOS_ENTRADA = ['Gastos mensais fixos', 'Entradas no cartão', 'Investimentos'];
-const MESES = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-];
+
+// Anos disponíveis na inserção: do ano passado até 6 anos à frente (cobre parcelas longas).
+const ANO_ATUAL = new Date().getFullYear();
+const ANOS = Array.from({ length: 8 }, (_, i) => ANO_ATUAL - 1 + i);
 
 export default function InsercaoDados() {
   const dataAtual = new Date();
@@ -18,6 +19,7 @@ export default function InsercaoDados() {
     comentario: '',
     formaPagamento: 'Crédito',
     mesReferente: MESES[dataAtual.getMonth()],
+    anoReferente: dataAtual.getFullYear(),
     pago: false
   });
 
@@ -106,35 +108,31 @@ export default function InsercaoDados() {
     let requests = [];
     
     const payloadBase = { ...formData };
+    const diaBase = formData.data.split('-')[2]; // Mantém o dia exato da inserção
 
     if (formData.tipo === 'Entradas no cartão' && formData.parcelas > 1 && formData.formaPagamento === 'Crédito') {
-      const valorParcela = valorTotal / formData.parcelas;
-      const [anoStr, mesStr, diaStr] = formData.data.split('-');
-      
-      let anoBase = parseInt(anoStr, 10);
-      let mesBase = parseInt(mesStr, 10);
-      const diaBase = diaStr; // Mantém o dia exato da inserção
-      
-      const indiceMesRefBase = MESES.indexOf(formData.mesReferente);
-      
+      // O valor digitado é o valor DE CADA parcela, replicado nos meses seguintes.
+      const valorParcela = valorTotal;
+      const grupoId = crypto.randomUUID(); // Liga todas as parcelas da mesma compra
+      const indiceBase = formData.anoReferente * 12 + MESES.indexOf(formData.mesReferente);
+
       for (let i = 0; i < formData.parcelas; i++) {
-        // Cálculo de avanço do mês da Data ISO
-        let novoMesNum = mesBase + i;
-        let novoAno = anoBase + Math.floor((novoMesNum - 1) / 12);
-        let mesFormatado = ((novoMesNum - 1) % 12) + 1;
-        const dataFormatada = `${novoAno}-${String(mesFormatado).padStart(2, '0')}-${diaBase}`;
-        
-        // Cálculo de avanço do Mês Referente
-        const indiceMesRefParcela = (indiceMesRefBase + i) % 12;
-        const mesReferenteParcela = MESES[indiceMesRefParcela];
-        
+        // Avanço por índice absoluto: mês e ano andam juntos, sem dar voltas no mesmo ano
+        const indiceAtual = indiceBase + i;
+        const anoParcela = Math.floor(indiceAtual / 12);
+        const mesIdxParcela = indiceAtual % 12;
+        const mesReferenteParcela = MESES[mesIdxParcela];
+        const dataFormatada = `${anoParcela}-${String(mesIdxParcela + 1).padStart(2, '0')}-${diaBase}`;
+
         requests.push(window.api.inserirTransacao({
           ...payloadBase,
           valor: valorParcela,
           data: dataFormatada,
           mesReferente: mesReferenteParcela,
+          anoReferente: anoParcela,
           parcelaAtual: i + 1, // Injeção do indexador da parcela atual
-          mesesPagos: formData.pago ? [mesReferenteParcela] : []
+          grupoId,
+          mesesPagos: formData.pago ? [chavePago(mesReferenteParcela, anoParcela)] : []
         }));
       }
     } else {
@@ -142,7 +140,7 @@ export default function InsercaoDados() {
       requests.push(window.api.inserirTransacao({
         ...payloadBase,
         valor: valorTotal,
-        mesesPagos: formData.pago ? [formData.mesReferente] : []
+        mesesPagos: formData.pago ? [chavePago(formData.mesReferente, formData.anoReferente)] : []
       }));
     }
 
@@ -159,6 +157,7 @@ export default function InsercaoDados() {
   };
 
   const fontStyleObj = { fontSize: '1.25rem', padding: '0.75rem' };
+  const ehParcelado = formData.tipo === 'Entradas no cartão' && formData.formaPagamento === 'Crédito' && formData.parcelas > 1;
 
   return (
     <div className="card" style={{ maxWidth: '600px', margin: '0 auto' }}>
@@ -270,8 +269,15 @@ export default function InsercaoDados() {
         </div>
 
         <label className="input-group" style={{ fontSize: '1.25rem' }}>
-          <span style={{ fontWeight: '600' }}>Valor (R$)</span>
+          <span style={{ fontWeight: '600' }}>
+            {ehParcelado ? 'Valor de Cada Parcela (R$)' : 'Valor (R$)'}
+          </span>
           <input type="number" step="0.01" required className="input-field" style={fontStyleObj} value={formData.valor} onChange={e => setFormData({...formData, valor: e.target.value})} />
+          {ehParcelado && (
+            <span style={{ fontSize: '0.95rem', color: '#6b7280', marginTop: '0.4rem' }}>
+              Este valor será lançado em cada uma das {formData.parcelas} parcelas (total: R$ {(parseFloat(formData.valor || 0) * formData.parcelas).toFixed(2)}).
+            </span>
+          )}
         </label>
 
         <label className="input-group" style={{ fontSize: '1.25rem' }}>
@@ -279,12 +285,20 @@ export default function InsercaoDados() {
           <input type="date" required className="input-field" style={fontStyleObj} value={formData.data} onChange={e => setFormData({...formData, data: e.target.value})} />
         </label>
 
-        <label className="input-group" style={{ fontSize: '1.25rem' }}>
-          <span style={{ fontWeight: '600' }}>Mês Referente (Ciclo de Cobrança)</span>
-          <select className="input-field" style={fontStyleObj} value={formData.mesReferente} onChange={e => setFormData({...formData, mesReferente: e.target.value})}>
-            {MESES.map(mes => <option key={mes} value={mes}>{mes}</option>)}
-          </select>
-        </label>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end' }}>
+          <label className="input-group" style={{ fontSize: '1.25rem', flex: 2 }}>
+            <span style={{ fontWeight: '600' }}>Mês Referente (Ciclo de Cobrança)</span>
+            <select className="input-field" style={fontStyleObj} value={formData.mesReferente} onChange={e => setFormData({...formData, mesReferente: e.target.value})}>
+              {MESES.map(mes => <option key={mes} value={mes}>{mes}</option>)}
+            </select>
+          </label>
+          <label className="input-group" style={{ fontSize: '1.25rem', flex: 1 }}>
+            <span style={{ fontWeight: '600' }}>Ano</span>
+            <select className="input-field" style={fontStyleObj} value={formData.anoReferente} onChange={e => setFormData({...formData, anoReferente: parseInt(e.target.value, 10)})}>
+              {ANOS.map(ano => <option key={ano} value={ano}>{ano}</option>)}
+            </select>
+          </label>
+        </div>
 
         <label className="input-group" style={{ fontSize: '1.25rem' }}>
           <span style={{ fontWeight: '600' }}>Comentário</span>
