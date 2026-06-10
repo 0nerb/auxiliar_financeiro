@@ -24,3 +24,4 @@ db.json
 *.njsproj
 *.sln
 *.sw?
+*.exe
