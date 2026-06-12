@@ -10,6 +10,11 @@ contextBridge.exposeInMainWorld('api', {
   excluirTransacao: (id) => ipcRenderer.invoke('transacoes:excluir', id),
   excluirGrupo: (grupoId) => ipcRenderer.invoke('transacoes:excluirGrupo', grupoId),
 
+  // Ganhos (renda por mês)
+  listarGanhos: () => ipcRenderer.invoke('ganhos:listar'),
+  inserirGanho: (ganho) => ipcRenderer.invoke('ganhos:inserir', ganho),
+  excluirGanho: (id) => ipcRenderer.invoke('ganhos:excluir', id),
+
   // Categorias
   listarCategorias: () => ipcRenderer.invoke('categorias:listar'),
   inserirCategoria: (nome) => ipcRenderer.invoke('categorias:inserir', nome),

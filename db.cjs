@@ -64,6 +64,15 @@ function criarTabelas() {
       pago           INTEGER DEFAULT 0,
       mesesPagos     TEXT DEFAULT '[]'
     );
+
+    CREATE TABLE IF NOT EXISTS ganhos (
+      id           TEXT PRIMARY KEY,
+      valor        REAL,
+      mesReferente TEXT,
+      anoReferente INTEGER,
+      comentario   TEXT,
+      data         TEXT
+    );
   `);
 
   // Migração para bancos já existentes: adiciona colunas novas se faltarem
@@ -205,6 +214,33 @@ function excluirGrupo(grupoId) {
   return { grupoId, removidos: info.changes };
 }
 
+// ---- Ganhos (renda por mês) ----
+
+function listarGanhos() {
+  return db.prepare('SELECT * FROM ganhos').all();
+}
+
+function inserirGanho(g) {
+  const id = gerarId();
+  db.prepare(`
+    INSERT INTO ganhos (id, valor, mesReferente, anoReferente, comentario, data)
+    VALUES (@id, @valor, @mesReferente, @anoReferente, @comentario, @data)
+  `).run({
+    id,
+    valor: g.valor ?? 0,
+    mesReferente: g.mesReferente ?? null,
+    anoReferente: g.anoReferente ?? null,
+    comentario: g.comentario ?? '',
+    data: g.data ?? null
+  });
+  return db.prepare('SELECT * FROM ganhos WHERE id = ?').get(id);
+}
+
+function excluirGanho(id) {
+  db.prepare('DELETE FROM ganhos WHERE id = ?').run(id);
+  return { id };
+}
+
 // ---- Categorias ----
 
 function listarCategorias() {
@@ -233,6 +269,9 @@ module.exports = {
   atualizarTransacao,
   excluirTransacao,
   excluirGrupo,
+  listarGanhos,
+  inserirGanho,
+  excluirGanho,
   listarCategorias,
   inserirCategoria,
   excluirCategoria,

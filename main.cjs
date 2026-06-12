@@ -10,6 +10,10 @@ function registrarHandlers() {
   ipcMain.handle('transacoes:excluir', (_e, id) => db.excluirTransacao(id));
   ipcMain.handle('transacoes:excluirGrupo', (_e, grupoId) => db.excluirGrupo(grupoId));
 
+  ipcMain.handle('ganhos:listar', () => db.listarGanhos());
+  ipcMain.handle('ganhos:inserir', (_e, ganho) => db.inserirGanho(ganho));
+  ipcMain.handle('ganhos:excluir', (_e, id) => db.excluirGanho(id));
+
   ipcMain.handle('categorias:listar', () => db.listarCategorias());
   ipcMain.handle('categorias:inserir', (_e, nome) => db.inserirCategoria(nome));
   ipcMain.handle('categorias:excluir', (_e, id) => db.excluirCategoria(id));

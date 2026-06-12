@@ -4,7 +4,19 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>auxiliar-financeiro</title>
+    <title>Auxiliar Financeiro</title>
+    <script>
+      // Aplica o tema salvo antes do React montar, evitando flash de tela clara
+      (function () {
+        try {
+          var t = localStorage.getItem('tema');
+          if (t !== 'light' && t !== 'dark') {
+            t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } catch (e) { /* ignora */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
