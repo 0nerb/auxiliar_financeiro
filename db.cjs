@@ -73,6 +73,20 @@ function criarTabelas() {
       comentario   TEXT,
       data         TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS cofrinhos (
+      id            TEXT PRIMARY KEY,
+      nome          TEXT,
+      valor         REAL,
+      percentualCdi REAL,
+      dataDeposito  TEXT,
+      comentario    TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS configuracoes (
+      chave TEXT PRIMARY KEY,
+      valor TEXT
+    );
   `);
 
   // Migração para bancos já existentes: adiciona colunas novas se faltarem
@@ -241,6 +255,64 @@ function excluirGanho(id) {
   return { id };
 }
 
+// ---- Cofrinhos (reservas que rendem % do CDI) ----
+
+function listarCofrinhos() {
+  return db.prepare('SELECT * FROM cofrinhos ORDER BY rowid').all();
+}
+
+function inserirCofrinho(c) {
+  const id = gerarId();
+  db.prepare(`
+    INSERT INTO cofrinhos (id, nome, valor, percentualCdi, dataDeposito, comentario)
+    VALUES (@id, @nome, @valor, @percentualCdi, @dataDeposito, @comentario)
+  `).run({
+    id,
+    nome: c.nome ?? '',
+    valor: c.valor ?? 0,
+    percentualCdi: c.percentualCdi ?? 100,
+    dataDeposito: c.dataDeposito ?? null,
+    comentario: c.comentario ?? ''
+  });
+  return db.prepare('SELECT * FROM cofrinhos WHERE id = ?').get(id);
+}
+
+function atualizarCofrinho(id, campos) {
+  const permitidos = ['nome', 'valor', 'percentualCdi', 'dataDeposito', 'comentario'];
+  const sets = [];
+  const valores = {};
+  for (const chave of permitidos) {
+    if (chave in campos) {
+      sets.push(`${chave} = @${chave}`);
+      valores[chave] = campos[chave];
+    }
+  }
+  if (sets.length === 0) return db.prepare('SELECT * FROM cofrinhos WHERE id = ?').get(id);
+  valores.id = id;
+  db.prepare(`UPDATE cofrinhos SET ${sets.join(', ')} WHERE id = @id`).run(valores);
+  return db.prepare('SELECT * FROM cofrinhos WHERE id = ?').get(id);
+}
+
+function excluirCofrinho(id) {
+  db.prepare('DELETE FROM cofrinhos WHERE id = ?').run(id);
+  return { id };
+}
+
+// ---- Configurações chave/valor (taxa CDI etc.) ----
+
+function getConfig(chave) {
+  const row = db.prepare('SELECT valor FROM configuracoes WHERE chave = ?').get(chave);
+  return row ? row.valor : null;
+}
+
+function setConfig(chave, valor) {
+  db.prepare(`
+    INSERT INTO configuracoes (chave, valor) VALUES (?, ?)
+    ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor
+  `).run(chave, String(valor));
+  return { chave, valor };
+}
+
 // ---- Categorias ----
 
 function listarCategorias() {
@@ -272,6 +344,12 @@ module.exports = {
   listarGanhos,
   inserirGanho,
   excluirGanho,
+  listarCofrinhos,
+  inserirCofrinho,
+  atualizarCofrinho,
+  excluirCofrinho,
+  getConfig,
+  setConfig,
   listarCategorias,
   inserirCategoria,
   excluirCategoria,

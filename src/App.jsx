@@ -3,6 +3,7 @@ import { HashRouter, Routes, Route, NavLink, useLocation } from 'react-router-do
 import InsercaoDados from './InsercaoDados';
 import Dashboard from './Dashboard';
 import Listagem from './Listagem';
+import Cofrinhos from './Cofrinhos';
 import './App.css';
 
 // ----- ícones simples (SVG inline, herdam currentColor) -----
@@ -14,6 +15,7 @@ const Icon = ({ d, size = 18 }) => (
 const IconDashboard = () => <Icon d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />;
 const IconPlus = () => <Icon d="M12 5v14M5 12h14" />;
 const IconList = () => <Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />;
+const IconPiggy = () => <Icon d="M19 9V8a3 3 0 0 0-3-3h-2.5A4.5 4.5 0 0 0 9 9.5v0A4.5 4.5 0 0 0 13.5 14H16a3 3 0 0 0 3-3v-1zM3 12a4 4 0 0 0 4 4M7 16v3M17 17v2M9 5l1-2" />;
 const IconSun = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <circle cx="12" cy="12" r="4" />
@@ -46,8 +48,9 @@ function useTheme() {
 // Título e subtítulo da topbar conforme a rota ativa
 function useTituloRota() {
   const { pathname } = useLocation();
-  if (pathname.startsWith('/inserir'))  return { titulo: 'Inserir transação', subtitulo: 'Registre uma nova entrada no controle financeiro' };
-  if (pathname.startsWith('/listagem')) return { titulo: 'Visualizar contas',  subtitulo: 'Filtre por mês e ano para ver seus lançamentos' };
+  if (pathname.startsWith('/inserir'))   return { titulo: 'Inserir transação', subtitulo: 'Registre uma nova entrada no controle financeiro' };
+  if (pathname.startsWith('/listagem'))  return { titulo: 'Visualizar contas',  subtitulo: 'Filtre por mês e ano para ver seus lançamentos' };
+  if (pathname.startsWith('/cofrinhos')) return { titulo: 'Cofrinhos',          subtitulo: 'Reservas que rendem um percentual do CDI' };
   return { titulo: 'Dashboard', subtitulo: 'Visão geral dos seus gastos e investimentos' };
 }
 
@@ -73,8 +76,11 @@ function Shell() {
         <NavLink to="/listagem" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
           <IconList /> Visualizar contas
         </NavLink>
+        <NavLink to="/cofrinhos" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+          <IconPiggy /> Cofrinhos
+        </NavLink>
 
-        <div className="sidebar-footer">Auxiliar Financeiro v1.2</div>
+        <div className="sidebar-footer">Auxiliar Financeiro v1.3</div>
       </aside>
 
       <main className="main">
@@ -100,6 +106,7 @@ function Shell() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/inserir" element={<InsercaoDados />} />
           <Route path="/listagem" element={<Listagem />} />
+          <Route path="/cofrinhos" element={<Cofrinhos />} />
         </Routes>
       </main>
     </div>
