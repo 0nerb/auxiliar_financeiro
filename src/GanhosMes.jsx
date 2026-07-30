@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { MESES } from './periodo';
+import { useConfirm } from './confirmContext';
 
 const ANO_ATUAL = new Date().getFullYear();
 const ANOS = Array.from({ length: 8 }, (_, i) => ANO_ATUAL - 1 + i);
@@ -7,6 +8,7 @@ const fmtReal = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFraction
 
 export default function GanhosMes() {
   const hoje = new Date();
+  const confirmar = useConfirm();
   const [ganhos, setGanhos] = useState([]);
   const [form, setForm] = useState({
     valor: '',
@@ -57,7 +59,7 @@ export default function GanhosMes() {
   };
 
   const handleExcluir = async (g) => {
-    if (!window.confirm('Remover este ganho?')) return;
+    if (!(await confirmar('Remover este ganho?'))) return;
     try {
       await window.api.excluirGanho(g.id);
       setGanhos(prev => prev.filter(x => x.id !== g.id));

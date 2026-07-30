@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import { MESES, apareceNoPeriodo, anosDisponiveis, chavePago } from './periodo';
+import { useConfirm } from './confirmContext';
 
 export default function Listagem() {
+  const confirmar = useConfirm();
   const [transacoes, setTransacoes] = useState([]);
   const [ganhos, setGanhos] = useState([]);
   const [mesSelecionado, setMesSelecionado] = useState(() => MESES[new Date().getMonth()]);
@@ -49,12 +51,12 @@ export default function Listagem() {
     try {
       if (transacao.tipo === 'Gastos mensais fixos') {
         // Gasto fixo: cancela a partir deste mês/ano (some daqui para frente, preserva o passado)
-        if (!window.confirm(`Encerrar este gasto fixo a partir de ${mesSelecionado}/${anoSelecionado}?`)) return;
+        if (!(await confirmar(`Encerrar este gasto fixo a partir de ${mesSelecionado}/${anoSelecionado}?`))) return;
         await window.api.atualizarTransacao(transacao.id, { mesFim: mesSelecionado, anoFim: anoSelecionado });
         setTransacoes(prev => prev.map(t => t.id === transacao.id ? { ...t, mesFim: mesSelecionado, anoFim: anoSelecionado } : t));
       } else if (ehParcelamento && transacao.grupoId) {
         // Parcelado (novo): remove a compra inteira de uma vez pelo grupo
-        if (!window.confirm(`Esta é uma compra parcelada em ${transacao.parcelas}x. Remover TODAS as ${transacao.parcelas} parcelas de uma vez?`)) return;
+        if (!(await confirmar(`Esta é uma compra parcelada em ${transacao.parcelas}x. Remover TODAS as ${transacao.parcelas} parcelas de uma vez?`))) return;
         await window.api.excluirGrupo(transacao.grupoId);
         setTransacoes(prev => prev.filter(t => t.grupoId !== transacao.grupoId));
       } else if (ehParcelamento) {
@@ -68,13 +70,13 @@ export default function Listagem() {
           t.formaPagamento === transacao.formaPagamento &&
           (t.comentario || '') === (transacao.comentario || '')
         );
-        if (!window.confirm(`Compra parcelada em ${transacao.parcelas}x. Foram encontradas ${irmaos.length} parcelas semelhantes. Remover todas de uma vez?`)) return;
+        if (!(await confirmar(`Compra parcelada em ${transacao.parcelas}x. Foram encontradas ${irmaos.length} parcelas semelhantes. Remover todas de uma vez?`))) return;
         await Promise.all(irmaos.map(t => window.api.excluirTransacao(t.id)));
         const idsRemovidos = new Set(irmaos.map(t => t.id));
         setTransacoes(prev => prev.filter(t => !idsRemovidos.has(t.id)));
       } else {
         // Transação avulsa
-        if (!window.confirm("Deseja remover este registro de contas?")) return;
+        if (!(await confirmar("Deseja remover este registro de contas?"))) return;
         await window.api.excluirTransacao(transacao.id);
         setTransacoes(prev => prev.filter(t => t.id !== transacao.id));
       }

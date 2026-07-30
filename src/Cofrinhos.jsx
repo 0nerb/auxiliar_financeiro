@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useConfirm } from './confirmContext';
 
 const CDI_PADRAO = 11.15; // % a.a. — usuário pode ajustar conforme a Selic
 const fmtReal = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -25,6 +26,7 @@ function diasDesde(dataIso) {
 }
 
 export default function Cofrinhos() {
+  const confirmar = useConfirm();
   const [cofrinhos, setCofrinhos] = useState([]);
   const [cdiAnual, setCdiAnual] = useState(CDI_PADRAO); // em %
   const [cdiEditando, setCdiEditando] = useState(String(CDI_PADRAO));
@@ -123,7 +125,7 @@ export default function Cofrinhos() {
   };
 
   const handleExcluir = async (c) => {
-    if (!window.confirm(`Remover o cofrinho "${c.nome}"?`)) return;
+    if (!(await confirmar(`Remover o cofrinho "${c.nome}"?`))) return;
     try {
       await window.api.excluirCofrinho(c.id);
       setCofrinhos(prev => prev.filter(x => x.id !== c.id));

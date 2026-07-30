@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { MESES, chavePago } from './periodo';
 import GanhosMes from './GanhosMes';
+import { useConfirm } from './confirmContext';
 
 const TIPOS_ENTRADA = ['Gastos mensais fixos', 'Entradas no cartão', 'Investimentos'];
 
@@ -28,6 +29,7 @@ export default function InsercaoDados() {
   const [gerenciando, setGerenciando] = useState(false);
   const [novaCategoria, setNovaCategoria] = useState('');
   const [mensagem, setMensagem] = useState(null); // { tipo: 'ok' | 'erro', texto }
+  const confirmar = useConfirm();
 
   const carregarCategorias = async () => {
     try {
@@ -82,7 +84,7 @@ export default function InsercaoDados() {
   };
 
   const handleExcluirCategoria = async (cat) => {
-    if (!window.confirm(`Excluir a categoria "${cat.nome}"?`)) return;
+    if (!(await confirmar(`Excluir a categoria "${cat.nome}"?`))) return;
     try {
       await window.api.excluirCategoria(cat.id);
       const restantes = categorias.filter(c => c.id !== cat.id);
