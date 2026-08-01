@@ -1,29 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useConfirm } from './confirmContext';
+import { calcularCofrinho } from './cofrinho';
 
 const CDI_PADRAO = 11.15; // % a.a. — usuário pode ajustar conforme a Selic
 const fmtReal = (v) => `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-// Calcula rendimento BRUTO (sem IR e sem IOF) com juros compostos diários e dias corridos.
-//   valor          → quanto está guardado
-//   percentualCdi  → ex.: 100 = rende 100% do CDI
-//   cdiAnual       → taxa CDI a.a. em decimal (ex.: 0.1115 para 11,15%)
-//   dias           → dias corridos
-function rendimentoComposto(valor, percentualCdi, cdiAnual, dias) {
-  if (valor <= 0 || dias <= 0) return 0;
-  const taxaAnualEfetiva = cdiAnual * (percentualCdi / 100);
-  const taxaDiaria = Math.pow(1 + taxaAnualEfetiva, 1 / 365) - 1;
-  return valor * (Math.pow(1 + taxaDiaria, dias) - 1);
-}
-
-function diasDesde(dataIso) {
-  if (!dataIso) return 0;
-  const inicio = new Date(dataIso + 'T00:00:00');
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const ms = hoje - inicio;
-  return Math.max(0, Math.floor(ms / 86400000));
-}
 
 export default function Cofrinhos() {
   const confirmar = useConfirm();
@@ -173,13 +153,10 @@ export default function Cofrinhos() {
   const cdiDecimal = cdiAnual / 100;
 
   // Pré-calcula rendimento de cada cofrinho (acumulado e mensal estimado)
-  const cofrinhosCalculados = useMemo(() => cofrinhos.map(c => {
-    const dias = diasDesde(c.dataDeposito);
-    const acumulado = rendimentoComposto(c.valor, c.percentualCdi, cdiDecimal, dias);
-    const mensal = rendimentoComposto(c.valor, c.percentualCdi, cdiDecimal, 30);
-    const taxaAnualEfetiva = cdiDecimal * (c.percentualCdi / 100) * 100; // em %
-    return { ...c, dias, acumulado, mensal, taxaAnualEfetiva };
-  }), [cofrinhos, cdiDecimal]);
+  const cofrinhosCalculados = useMemo(
+    () => cofrinhos.map(c => calcularCofrinho(c, cdiDecimal)),
+    [cofrinhos, cdiDecimal]
+  );
 
   const totalGuardado = cofrinhosCalculados.reduce((acc, c) => acc + c.valor, 0);
   const totalAcumulado = cofrinhosCalculados.reduce((acc, c) => acc + c.acumulado, 0);

@@ -28,5 +28,40 @@ contextBridge.exposeInMainWorld('api', {
   // Categorias
   listarCategorias: () => ipcRenderer.invoke('categorias:listar'),
   inserirCategoria: (nome) => ipcRenderer.invoke('categorias:inserir', nome),
-  excluirCategoria: (id) => ipcRenderer.invoke('categorias:excluir', id)
+  excluirCategoria: (id) => ipcRenderer.invoke('categorias:excluir', id),
+
+  // IA local
+  iaListarModelos: () => ipcRenderer.invoke('ia:listarModelos'),
+  iaBaixar: (id) => ipcRenderer.invoke('ia:baixar', id),
+  iaPrepararChat: (id, contexto) => ipcRenderer.invoke('ia:prepararChat', id, contexto),
+  iaPerguntar: (pergunta) => ipcRenderer.invoke('ia:perguntar', pergunta),
+
+  // Listeners de progresso de download e streaming de tokens.
+  // Retornam uma função para cancelar a inscrição.
+  onProgressoIA: (callback) => {
+    const handler = (_e, dados) => callback(dados);
+    ipcRenderer.on('ia:progresso', handler);
+    return () => ipcRenderer.removeListener('ia:progresso', handler);
+  },
+  onTokenIA: (callback) => {
+    const handler = (_e, chunk) => callback(chunk);
+    ipcRenderer.on('ia:token', handler);
+    return () => ipcRenderer.removeListener('ia:token', handler);
+  },
+
+  // Investimentos: carteira
+  listarCarteira: (classe) => ipcRenderer.invoke('carteira:listar', classe),
+  inserirCarteira: (item) => ipcRenderer.invoke('carteira:inserir', item),
+  atualizarCarteira: (id, campos) => ipcRenderer.invoke('carteira:atualizar', id, campos),
+  excluirCarteira: (id) => ipcRenderer.invoke('carteira:excluir', id),
+
+  // Investimentos: listas de ativos e dados de mercado
+  listarAtivosCache: (classe) => ipcRenderer.invoke('ativos:listarCache', classe),
+  ultimaAtualizacaoLista: (classe) => ipcRenderer.invoke('ativos:ultimaAtualizacao', classe),
+  atualizarListaAtivos: (classe) => ipcRenderer.invoke('ativos:atualizarLista', classe),
+  dadosAtivo: (ticker, classe, dataCompra) => ipcRenderer.invoke('mercado:dadosAtivo', ticker, classe, dataCompra),
+  cotacaoAtual: (ticker, classe) => ipcRenderer.invoke('mercado:cotacaoAtual', ticker, classe),
+  precoNaData: (ticker, classe, data) => ipcRenderer.invoke('mercado:precoNaData', ticker, classe, data),
+  dividendos: (ticker, classe, dataCompra) => ipcRenderer.invoke('mercado:dividendos', ticker, classe, dataCompra),
+  serieHistorica: (ticker, classe, dias) => ipcRenderer.invoke('mercado:serie', ticker, classe, dias)
 });

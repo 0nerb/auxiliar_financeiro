@@ -126,7 +126,7 @@ export default function Listagem() {
           </label>
           <label className="input-group" style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', width: 'auto' }}>
             <span className="input-label" style={{ margin: 0 }}>Ano</span>
-            <select className="input-field" style={{ width: '100px' }} value={anoSelecionado} onChange={e => setAnoSelecionado(parseInt(e.target.value, 10))}>
+            <select className="input-field" style={{ width: '120px' }} value={anoSelecionado} onChange={e => setAnoSelecionado(parseInt(e.target.value, 10))}>
               {anosDisp.map(ano => <option key={ano} value={ano}>{ano}</option>)}
             </select>
           </label>

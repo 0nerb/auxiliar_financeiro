@@ -118,7 +118,7 @@ export default function Dashboard() {
           <span className="input-label" style={{ margin: 0 }}>Ano</span>
           <select
             className="input-field"
-            style={{ width: '110px' }}
+            style={{ width: '120px' }}
             value={anoSelecionado}
             onChange={e => setAnoSelecionado(parseInt(e.target.value, 10))}
           >

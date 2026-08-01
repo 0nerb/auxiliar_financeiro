@@ -87,7 +87,35 @@ function criarTabelas() {
       chave TEXT PRIMARY KEY,
       valor TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS carteira (
+      id          TEXT PRIMARY KEY,
+      classe      TEXT,
+      ticker      TEXT,
+      nome        TEXT,
+      quantidade  REAL,
+      precoCompra REAL,
+      dataCompra  TEXT,
+      comentario  TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS ativos_cache (
+      classe       TEXT,
+      ticker       TEXT,
+      nome         TEXT,
+      subtipo      TEXT,
+      setor        TEXT,
+      preco        REAL,
+      atualizadoEm TEXT,
+      PRIMARY KEY (classe, ticker)
+    );
   `);
+
+  // Migração: coluna preco no cache de ativos (para bancos criados antes)
+  const colsCache = db.prepare('PRAGMA table_info(ativos_cache)').all().map(c => c.name);
+  if (!colsCache.includes('preco')) {
+    db.exec('ALTER TABLE ativos_cache ADD COLUMN preco REAL');
+  }
 
   // Migração para bancos já existentes: adiciona colunas novas se faltarem
   const colunas = db.prepare('PRAGMA table_info(transacoes)').all().map(c => c.name);
@@ -313,6 +341,83 @@ function setConfig(chave, valor) {
   return { chave, valor };
 }
 
+// ---- Carteira de investimentos ----
+
+function listarCarteira(classe) {
+  if (classe) {
+    return db.prepare('SELECT * FROM carteira WHERE classe = ? ORDER BY rowid').all(classe);
+  }
+  return db.prepare('SELECT * FROM carteira ORDER BY rowid').all();
+}
+
+function inserirCarteira(item) {
+  const id = gerarId();
+  db.prepare(`
+    INSERT INTO carteira (id, classe, ticker, nome, quantidade, precoCompra, dataCompra, comentario)
+    VALUES (@id, @classe, @ticker, @nome, @quantidade, @precoCompra, @dataCompra, @comentario)
+  `).run({
+    id,
+    classe: item.classe ?? null,
+    ticker: item.ticker ?? null,
+    nome: item.nome ?? null,
+    quantidade: item.quantidade ?? 0,
+    precoCompra: item.precoCompra ?? null,
+    dataCompra: item.dataCompra ?? null,
+    comentario: item.comentario ?? ''
+  });
+  return db.prepare('SELECT * FROM carteira WHERE id = ?').get(id);
+}
+
+function atualizarCarteira(id, campos) {
+  const permitidos = ['quantidade', 'precoCompra', 'dataCompra', 'comentario'];
+  const sets = [];
+  const valores = {};
+  for (const chave of permitidos) {
+    if (chave in campos) { sets.push(`${chave} = @${chave}`); valores[chave] = campos[chave]; }
+  }
+  if (sets.length === 0) return db.prepare('SELECT * FROM carteira WHERE id = ?').get(id);
+  valores.id = id;
+  db.prepare(`UPDATE carteira SET ${sets.join(', ')} WHERE id = @id`).run(valores);
+  return db.prepare('SELECT * FROM carteira WHERE id = ?').get(id);
+}
+
+function excluirCarteira(id) {
+  db.prepare('DELETE FROM carteira WHERE id = ?').run(id);
+  return { id };
+}
+
+// ---- Cache de listas de ativos ----
+
+function salvarListaAtivos(classe, ativos) {
+  const agora = new Date().toISOString();
+  const del = db.prepare('DELETE FROM ativos_cache WHERE classe = ?');
+  const ins = db.prepare(`
+    INSERT OR REPLACE INTO ativos_cache (classe, ticker, nome, subtipo, setor, preco, atualizadoEm)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  const tx = db.transaction(() => {
+    del.run(classe);
+    ativos.forEach(a => ins.run(classe, a.ticker, a.nome, a.subtipo ?? null, a.setor ?? null, a.preco ?? null, agora));
+  });
+  tx();
+  return { classe, total: ativos.length, atualizadoEm: agora };
+}
+
+function listarAtivosCache(classe) {
+  return db.prepare('SELECT ticker, nome, subtipo, setor, preco FROM ativos_cache WHERE classe = ? ORDER BY ticker').all(classe);
+}
+
+// Preço cacheado de um ativo (usado pelo Tesouro, cujo preço vem da lista)
+function precoAtivoCache(classe, ticker) {
+  const row = db.prepare('SELECT preco FROM ativos_cache WHERE classe = ? AND ticker = ?').get(classe, ticker);
+  return row ? row.preco : null;
+}
+
+function ultimaAtualizacaoLista(classe) {
+  const row = db.prepare('SELECT MAX(atualizadoEm) AS em FROM ativos_cache WHERE classe = ?').get(classe);
+  return row ? row.em : null;
+}
+
 // ---- Categorias ----
 
 function listarCategorias() {
@@ -350,6 +455,14 @@ module.exports = {
   excluirCofrinho,
   getConfig,
   setConfig,
+  listarCarteira,
+  inserirCarteira,
+  atualizarCarteira,
+  excluirCarteira,
+  salvarListaAtivos,
+  listarAtivosCache,
+  precoAtivoCache,
+  ultimaAtualizacaoLista,
   listarCategorias,
   inserirCategoria,
   excluirCategoria,
