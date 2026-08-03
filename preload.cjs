@@ -47,6 +47,7 @@ contextBridge.exposeInMainWorld('api', {
   iaBaixar: (id) => ipcRenderer.invoke('ia:baixar', id),
   iaPrepararChat: (id, contexto) => ipcRenderer.invoke('ia:prepararChat', id, contexto),
   iaPerguntar: (pergunta) => ipcRenderer.invoke('ia:perguntar', pergunta),
+  iaContinuar: () => ipcRenderer.invoke('ia:continuar'),
 
   // Listeners de progresso de download e streaming de tokens.
   // Retornam uma função para cancelar a inscrição.

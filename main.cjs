@@ -122,6 +122,7 @@ function registrarHandlers() {
   ipcMain.handle('ia:baixar', (_e, id) => ai.baixarModelo(id));
   ipcMain.handle('ia:prepararChat', (_e, id, contexto) => ai.prepararChat(id, contexto));
   ipcMain.handle('ia:perguntar', (_e, pergunta) => ai.perguntar(pergunta));
+  ipcMain.handle('ia:continuar', () => ai.continuar());
 
   // Carteira de investimentos
   ipcMain.handle('carteira:listar', comBanco((_e, classe) => db.listarCarteira(classe)));

@@ -132,17 +132,33 @@ async function prepararChat(id, contexto) {
   return { ok: true };
 }
 
-// Envia uma pergunta na sessão atual (mantém histórico), com streaming de tokens
-async function perguntar(pergunta) {
-  if (!chatState) throw new Error('Chat não iniciado.');
-  const resposta = await chatState.session.prompt(pergunta, {
+// Limite de tokens por resposta. Respostas longas (planos de alocação, por
+// exemplo) podem esbarrar nele — quando isso acontece avisamos o usuário em
+// vez de cortar o texto silenciosamente.
+const MAX_TOKENS_RESPOSTA = 1600;
+
+async function gerar(entrada) {
+  // Atenção: `response` é um array de segmentos; o texto puro vem em `responseText`.
+  const { responseText, stopReason } = await chatState.session.promptWithMeta(entrada, {
     temperature: 0.4,
-    maxTokens: 800,
+    maxTokens: MAX_TOKENS_RESPOSTA,
     onTextChunk: (chunk) => {
       if (janela && !janela.isDestroyed()) janela.webContents.send('ia:token', chunk);
     }
   });
-  return { ok: true, texto: resposta };
+  return { ok: true, texto: responseText, truncado: stopReason === 'maxTokens' };
+}
+
+// Envia uma pergunta na sessão atual (mantém histórico), com streaming de tokens
+async function perguntar(pergunta) {
+  if (!chatState) throw new Error('Chat não iniciado.');
+  return gerar(pergunta);
+}
+
+// Retoma uma resposta que foi interrompida pelo limite de tokens
+async function continuar() {
+  if (!chatState) throw new Error('Chat não iniciado.');
+  return gerar('Continue exatamente de onde parou, sem repetir o que já foi dito.');
 }
 
 function fechar() {
@@ -159,5 +175,6 @@ module.exports = {
   baixarModelo,
   prepararChat,
   perguntar,
+  continuar,
   fechar
 };

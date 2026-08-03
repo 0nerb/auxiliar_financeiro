@@ -158,11 +158,44 @@ export default function Analise() {
         preparadoKeyRef.current = key;
       }
       setMensagens(prev => [...prev, { role: 'user', texto: q }, { role: 'assistant', texto: '' }]);
-      await window.api.iaPerguntar(q);
+      const r = await window.api.iaPerguntar(q);
+      // A resposta bateu no limite de tokens e ficou incompleta
+      if (r?.truncado) marcarTruncada();
     } catch (err) {
       console.error('Erro no chat da IA:', err);
       setErro('Não foi possível gerar a resposta. Tente novamente.');
       preparadoKeyRef.current = null;
+    } finally {
+      setRespondendo(false);
+    }
+  };
+
+  const marcarTruncada = () => {
+    setMensagens(prev => {
+      const copia = [...prev];
+      const ultima = copia[copia.length - 1];
+      if (ultima?.role === 'assistant') copia[copia.length - 1] = { ...ultima, truncada: true };
+      return copia;
+    });
+  };
+
+  // Retoma uma resposta interrompida, emendando no mesmo balão
+  const continuarResposta = async () => {
+    if (respondendo) return;
+    setErro(null);
+    setRespondendo(true);
+    setMensagens(prev => {
+      const copia = [...prev];
+      const ultima = copia[copia.length - 1];
+      if (ultima?.role === 'assistant') copia[copia.length - 1] = { ...ultima, truncada: false };
+      return copia;
+    });
+    try {
+      const r = await window.api.iaContinuar();
+      if (r?.truncado) marcarTruncada();
+    } catch (err) {
+      console.error('Erro ao continuar resposta:', err);
+      setErro('Não foi possível continuar a resposta.');
     } finally {
       setRespondendo(false);
     }
@@ -259,6 +292,17 @@ export default function Analise() {
                 }}>
                   {m.texto || (respondendo && i === mensagens.length - 1 ? <span className="cursor-pisca">▍</span> : '')}
                 </div>
+
+                {m.truncada && !respondendo && (
+                  <div style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--color-warning-text)' }}>
+                      A resposta ficou incompleta (atingiu o limite de tamanho).
+                    </span>
+                    <button type="button" className="btn btn-ghost" style={{ fontSize: '0.8rem', padding: '0.35rem 0.8rem' }} onClick={continuarResposta}>
+                      Continuar
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
             <div ref={fimRef} />
