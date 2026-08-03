@@ -1,7 +1,7 @@
 {
   "name": "auxiliar-financeiro",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Auxiliar financeiro pessoal para controle de contas e gastos.",
   "author": "Breno Kern Rangel",
   "main": "main.cjs",
@@ -52,12 +52,7 @@
     ],
     "files": [
       "dist/**/*",
-      "main.cjs",
-      "preload.cjs",
-      "db.cjs",
-      "ai.cjs",
-      "mercado.cjs",
-      "cripto.cjs",
+      "*.cjs",
       "package.json",
       "node_modules/**/*"
     ],
