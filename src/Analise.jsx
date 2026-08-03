@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { MESES, anosDisponiveis, montarResumoComparativo, montarResumoCarteira, montarLancamentosDoMes } from './periodo';
+import { calcularCofrinho } from './cofrinho';
 
 const fmtBytes = (b) => {
   if (!b) return '0 MB';
@@ -29,6 +30,7 @@ export default function Analise() {
 
   const [baixandoId, setBaixandoId] = useState(null);
   const [progresso, setProgresso] = useState(null);
+  const [modelosAbertos, setModelosAbertos] = useState(false);
 
   const [mensagens, setMensagens] = useState([]); // { role: 'user' | 'assistant', texto }
   const [pergunta, setPergunta] = useState('');
@@ -114,10 +116,23 @@ export default function Analise() {
     () => montarResumoComparativo(transacoes, ganhos, cofrinhos, anoSel, mesSel, cdiAnual),
     [transacoes, ganhos, cofrinhos, anoSel, mesSel, cdiAnual]
   );
-  const resumoCart = useMemo(
-    () => montarResumoCarteira(carteira.map(c => ({ ...c, precoAtual: cotacoesCart[c.ticker] }))),
-    [carteira, cotacoesCart]
-  );
+  // A carteira enviada à IA inclui os cofrinhos, para bater com a tela de
+  // Carteira consolidada (alocação e totais consideram as reservas).
+  const resumoCart = useMemo(() => {
+    const cdiDecimal = cdiAnual / 100;
+    const doMercado = carteira.map(c => ({ ...c, precoAtual: cotacoesCart[c.ticker] }));
+    const dasReservas = cofrinhos.map(c => {
+      const calc = calcularCofrinho(c, cdiDecimal);
+      return {
+        classe: 'cofrinhos',
+        ticker: c.nome,
+        quantidade: 1,
+        precoCompra: c.valor,
+        precoAtual: c.valor + calc.acumulado
+      };
+    });
+    return montarResumoCarteira([...doMercado, ...dasReservas]);
+  }, [carteira, cotacoesCart, cofrinhos, cdiAnual]);
   const resumoLanc = useMemo(
     () => montarLancamentosDoMes(transacoes, anoSel, mesSel),
     [transacoes, anoSel, mesSel]
@@ -140,6 +155,25 @@ export default function Analise() {
     } finally {
       setBaixandoId(null);
       setProgresso(null);
+    }
+  };
+
+  const handleExcluirModelo = async (m) => {
+    if (!window.confirm(`Remover o modelo "${m.nome}" deste computador? Isso libera ${m.tamanho} de espaço. Você poderá baixá-lo novamente depois.`)) return;
+    setErro(null);
+    try {
+      await window.api.iaExcluirModelo(m.id);
+      const lista = await window.api.iaListarModelos();
+      setModelos(lista);
+      // Se o removido era o selecionado, aponta para outro que esteja baixado
+      if (modeloSel === m.id) {
+        const outro = lista.find(x => x.baixado);
+        if (outro) setModeloSel(outro.id);
+      }
+      preparadoKeyRef.current = null;
+    } catch (err) {
+      console.error('Erro ao remover modelo:', err);
+      setErro('Não foi possível remover o modelo.');
     }
   };
 
@@ -220,41 +254,76 @@ export default function Analise() {
         </div>
       </div>
 
-      {!algumBaixado ? (
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+      {/* Modelos — sempre visível, permite baixar outros, trocar e remover */}
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
           <div>
-            <h2 style={{ margin: 0 }}>Ativar a análise por IA</h2>
+            <h2 style={{ margin: 0 }}>Modelos de IA</h2>
             <p style={{ margin: '0.35rem 0 0', color: 'var(--color-text-secondary)', fontSize: '0.9rem' }}>
-              A IA roda 100% no seu computador — seus dados nunca saem da máquina. Escolha um modelo para baixar
-              (só na primeira vez). Depois a conversa é offline.
+              Tudo roda no seu computador — seus dados nunca saem da máquina. Baixe quantos quiser e
+              escolha qual usar em cada conversa.
             </p>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
-            {modelos.map(m => (
-              <div key={m.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', background: 'var(--color-bg-muted)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem' }}>
-                  <h3 style={{ margin: 0 }}>{m.nome}</h3>
-                  <span className="badge badge-muted">{m.tamanho}</span>
-                </div>
-                <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>{m.descricao}</p>
-                <button type="button" className="btn btn-primary" disabled={baixandoId !== null} onClick={() => handleBaixar(m.id)} style={{ marginTop: '0.25rem' }}>
-                  {baixandoId === m.id ? 'Baixando...' : 'Baixar e ativar'}
-                </button>
-                {baixandoId === m.id && progresso && (
-                  <div>
-                    <div style={{ height: 8, background: 'var(--color-border)', borderRadius: 'var(--radius-pill)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.round((progresso.pct || 0) * 100)}%`, background: 'var(--color-accent)', transition: 'width 0.2s' }} />
-                    </div>
-                    <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
-                      {Math.round((progresso.pct || 0) * 100)}% — {fmtBytes(progresso.downloadedSize)} de {fmtBytes(progresso.totalSize)}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+          {algumBaixado && (
+            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.85rem' }} onClick={() => setModelosAbertos(v => !v)}>
+              {modelosAbertos ? 'Ocultar' : 'Gerenciar'}
+            </button>
+          )}
         </div>
-      ) : (
+
+        {(modelosAbertos || !algumBaixado) && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
+            {modelos.map(m => {
+              const ativo = m.baixado && modeloSel === m.id;
+              return (
+                <div key={m.id} className="card" style={{
+                  display: 'flex', flexDirection: 'column', gap: '0.6rem',
+                  background: 'var(--color-bg-muted)',
+                  borderColor: ativo ? 'var(--color-accent)' : 'var(--color-border)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '0.5rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '0.98rem' }}>{m.nome}</h3>
+                    <span className="badge badge-muted">{m.tamanho}</span>
+                  </div>
+                  <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: '0.85rem', flex: 1 }}>{m.descricao}</p>
+
+                  {m.baixado ? (
+                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      {ativo ? (
+                        <span className="badge badge-debito">Em uso</span>
+                      ) : (
+                        <button type="button" className="btn btn-primary" style={{ fontSize: '0.82rem', padding: '0.4rem 0.85rem' }} onClick={() => setModeloSel(m.id)}>
+                          Usar este
+                        </button>
+                      )}
+                      <button type="button" className="btn btn-ghost" style={{ fontSize: '0.82rem', padding: '0.4rem 0.85rem' }} onClick={() => handleExcluirModelo(m)}>
+                        Remover
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" className="btn btn-primary" disabled={baixandoId !== null} onClick={() => handleBaixar(m.id)}>
+                      {baixandoId === m.id ? 'Baixando...' : 'Baixar'}
+                    </button>
+                  )}
+
+                  {baixandoId === m.id && progresso && (
+                    <div>
+                      <div style={{ height: 8, background: 'var(--color-border)', borderRadius: 'var(--radius-pill)', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.round((progresso.pct || 0) * 100)}%`, background: 'var(--color-accent)', transition: 'width 0.2s' }} />
+                      </div>
+                      <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--color-text-secondary)' }}>
+                        {Math.round((progresso.pct || 0) * 100)}% — {fmtBytes(progresso.downloadedSize)} de {fmtBytes(progresso.totalSize)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {algumBaixado && (
         <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem', minHeight: '420px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <h2 style={{ margin: 0 }}>Converse sobre suas finanças</h2>

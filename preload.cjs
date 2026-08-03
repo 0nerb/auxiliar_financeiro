@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('api', {
   // IA local
   iaListarModelos: () => ipcRenderer.invoke('ia:listarModelos'),
   iaBaixar: (id) => ipcRenderer.invoke('ia:baixar', id),
+  iaExcluirModelo: (id) => ipcRenderer.invoke('ia:excluirModelo', id),
   iaPrepararChat: (id, contexto) => ipcRenderer.invoke('ia:prepararChat', id, contexto),
   iaPerguntar: (pergunta) => ipcRenderer.invoke('ia:perguntar', pergunta),
   iaContinuar: () => ipcRenderer.invoke('ia:continuar'),

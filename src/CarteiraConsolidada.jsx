@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { calcularCofrinho } from './cofrinho';
 
 const RANGES = [
   { label: '1M', dias: 30 },
@@ -17,7 +18,8 @@ const CLASSES = {
   acoes: { rotulo: 'Ações', cor: '#2563eb' },
   fiis: { rotulo: 'Fundos Imobiliários', cor: '#16a34a' },
   tesouro: { rotulo: 'Tesouro Direto', cor: '#d97706' },
-  bitcoin: { rotulo: 'Bitcoin', cor: '#f59e0b' }
+  bitcoin: { rotulo: 'Bitcoin', cor: '#f59e0b' },
+  cofrinhos: { rotulo: 'Cofrinhos', cor: '#9333ea' }
 };
 
 export default function CarteiraConsolidada() {
@@ -26,13 +28,23 @@ export default function CarteiraConsolidada() {
   const [divs, setDivs] = useState({});        // holdingId -> { porCota }
   const [historicos, setHistoricos] = useState({}); // `${classe}:${ticker}` -> [{data, preco}]
   const [rangeDias, setRangeDias] = useState(180);
+  const [cofrinhos, setCofrinhos] = useState([]);
+  const [cdiAnual, setCdiAnual] = useState(0);
 
   useEffect(() => {
     let ativo = true;
     (async () => {
       try {
-        const cart = await window.api.listarCarteira();
-        if (ativo) setHoldings(cart);
+        const [cart, cofs, cdi] = await Promise.all([
+          window.api.listarCarteira(),
+          window.api.listarCofrinhos(),
+          window.api.getConfig('cdiAnual')
+        ]);
+        if (!ativo) return;
+        setHoldings(cart);
+        setCofrinhos(cofs);
+        const n = parseFloat(cdi);
+        if (!Number.isNaN(n)) setCdiAnual(n);
       } catch (err) {
         console.error('Erro ao carregar carteira consolidada:', err);
       }
@@ -95,6 +107,18 @@ export default function CarteiraConsolidada() {
       return p;
     };
 
+    // Rendimento do cofrinho até uma data (juros compostos, dias corridos)
+    const cdiDecimal = cdiAnual / 100;
+    const valorCofrinhoEm = (c, dataStr) => {
+      if (!c.dataDeposito || c.dataDeposito > dataStr) return null;
+      const dias = Math.max(0, Math.floor(
+        (new Date(dataStr + 'T00:00:00') - new Date(c.dataDeposito + 'T00:00:00')) / 86400000
+      ));
+      const taxaAnual = cdiDecimal * (c.percentualCdi / 100);
+      const taxaDiaria = Math.pow(1 + taxaAnual, 1 / 365) - 1;
+      return c.valor * Math.pow(1 + taxaDiaria, dias);
+    };
+
     return datas.map(dataStr => {
       let total = 0;
       let algum = false;
@@ -104,9 +128,13 @@ export default function CarteiraConsolidada() {
         const preco = h.classe === 'tesouro' ? precos[chave] : precoEm(historicos[chave] || [], dataStr);
         if (preco != null) { total += preco * h.quantidade; algum = true; }
       });
+      cofrinhos.forEach(c => {
+        const v = valorCofrinhoEm(c, dataStr);
+        if (v != null) { total += v; algum = true; }
+      });
       return algum ? { data: dataStr, valor: total } : null;
     }).filter(Boolean);
-  }, [historicos, holdings, precos]);
+  }, [historicos, holdings, precos, cofrinhos, cdiAnual]);
 
   const enriquecidos = useMemo(() => holdings.map(h => {
     const preco = precos[`${h.classe}:${h.ticker}`];
@@ -120,9 +148,33 @@ export default function CarteiraConsolidada() {
     return { ...h, investido, valorAtual, proventos, rentabilidade };
   }), [holdings, precos, divs]);
 
+  // Cofrinhos entram como uma classe da carteira: o "investido" é o valor
+  // guardado e o "valor atual" já inclui o rendimento acumulado (bruto).
+  const cofrinhosComoAtivos = useMemo(() => {
+    const cdiDecimal = cdiAnual / 100;
+    return cofrinhos.map(c => {
+      const calc = calcularCofrinho(c, cdiDecimal);
+      const investido = c.valor;
+      const valorAtual = c.valor + calc.acumulado;
+      return {
+        id: `cofrinho-${c.id}`,
+        classe: 'cofrinhos',
+        ticker: c.nome,
+        nome: `${c.percentualCdi}% do CDI`,
+        quantidade: 1,
+        investido,
+        valorAtual,
+        proventos: 0,
+        rentabilidade: investido > 0 ? ((valorAtual - investido) / investido) * 100 : null
+      };
+    });
+  }, [cofrinhos, cdiAnual]);
+
+  const todos = useMemo(() => [...enriquecidos, ...cofrinhosComoAtivos], [enriquecidos, cofrinhosComoAtivos]);
+
   const totais = useMemo(() => {
     let investido = 0, atual = 0, proventos = 0, temTudo = true;
-    enriquecidos.forEach(e => {
+    todos.forEach(e => {
       investido += e.investido;
       proventos += e.proventos;
       if (e.valorAtual != null) atual += e.valorAtual; else temTudo = false;
@@ -130,25 +182,25 @@ export default function CarteiraConsolidada() {
     const ganho = temTudo ? (atual - investido + proventos) : null;
     const rentabilidade = investido > 0 && ganho != null ? (ganho / investido) * 100 : null;
     return { investido, atual, proventos, ganho, rentabilidade, temTudo };
-  }, [enriquecidos]);
+  }, [todos]);
 
   // Alocação por classe (valor atual)
   const porClasse = useMemo(() => {
     const mapa = {};
-    enriquecidos.forEach(e => {
+    todos.forEach(e => {
       if (e.valorAtual == null) return;
       if (!mapa[e.classe]) mapa[e.classe] = { classe: e.classe, valor: 0, investido: 0 };
       mapa[e.classe].valor += e.valorAtual;
       mapa[e.classe].investido += e.investido;
     });
     return Object.values(mapa).sort((a, b) => b.valor - a.valor);
-  }, [enriquecidos]);
+  }, [todos]);
 
   const dadosPizza = porClasse.map(c => ({ name: CLASSES[c.classe]?.rotulo || c.classe, value: c.valor, cor: CLASSES[c.classe]?.cor }));
 
   const tooltipStyle = { background: 'var(--color-bg-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', color: 'var(--color-text-primary)' };
 
-  if (holdings.length === 0) {
+  if (holdings.length === 0 && cofrinhos.length === 0) {
     return (
       <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--color-text-secondary)', maxWidth: '960px' }}>
         Nenhum investimento cadastrado ainda. Adicione ativos nas abas Ações, Fundos Imobiliários, Tesouro Direto ou Bitcoin.
@@ -300,7 +352,7 @@ export default function CarteiraConsolidada() {
             </tr>
           </thead>
           <tbody>
-            {enriquecidos.slice().sort((a, b) => (b.valorAtual || 0) - (a.valorAtual || 0)).map(e => (
+            {todos.slice().sort((a, b) => (b.valorAtual || 0) - (a.valorAtual || 0)).map(e => (
               <tr key={e.id}>
                 <td>
                   <div style={{ fontWeight: 500 }}>{e.ticker}</div>

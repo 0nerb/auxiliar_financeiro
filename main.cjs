@@ -120,6 +120,7 @@ function registrarHandlers() {
   // IA local (node-llama-cpp)
   ipcMain.handle('ia:listarModelos', () => ai.listarModelos());
   ipcMain.handle('ia:baixar', (_e, id) => ai.baixarModelo(id));
+  ipcMain.handle('ia:excluirModelo', (_e, id) => ai.excluirModelo(id));
   ipcMain.handle('ia:prepararChat', (_e, id, contexto) => ai.prepararChat(id, contexto));
   ipcMain.handle('ia:perguntar', (_e, pergunta) => ai.perguntar(pergunta));
   ipcMain.handle('ia:continuar', () => ai.continuar());

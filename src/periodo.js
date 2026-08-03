@@ -129,7 +129,7 @@ export function montarResumoFinanceiro(transacoes, ganhos, cofrinhos, ano, mesId
   ].join('\n');
 }
 
-const ROTULO_CLASSE = { acoes: 'Ações', fiis: 'Fundos Imobiliários', tesouro: 'Tesouro Direto', bitcoin: 'Bitcoin' };
+const ROTULO_CLASSE = { acoes: 'Ações', fiis: 'Fundos Imobiliários', tesouro: 'Tesouro Direto', bitcoin: 'Bitcoin', cofrinhos: 'Cofrinhos' };
 
 // Resumo da carteira de investimentos (holdings já enriquecidos com precoAtual, quando disponível).
 export function montarResumoCarteira(holdings) {

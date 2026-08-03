@@ -120,7 +120,7 @@ function Shell() {
           <IconShield /> Backup
         </NavLink>
 
-        <div className="sidebar-footer">Auxiliar Financeiro v1.5</div>
+        <div className="sidebar-footer">Auxiliar Financeiro v1.6</div>
       </aside>
 
       <main className="main">

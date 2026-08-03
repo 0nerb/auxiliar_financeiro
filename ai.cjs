@@ -12,10 +12,18 @@ let janela = null; // BrowserWindow para enviar progresso/tokens ao renderer
 
 // Catálogo de modelos disponíveis (GGUF quantizado, hospedado no Hugging Face)
 const MODELOS = {
+  '14b': {
+    id: '14b',
+    nome: 'Qwen 2.5 14B — avançado',
+    descricao: 'A melhor qualidade de análise. Exige 16 GB de RAM e é mais lento para responder.',
+    match: 'Qwen2.5-14B-Instruct-Q4_K_M',
+    uri: 'hf:bartowski/Qwen2.5-14B-Instruct-GGUF/Qwen2.5-14B-Instruct-Q4_K_M.gguf',
+    tamanho: '~9,0 GB'
+  },
   '7b': {
     id: '7b',
     nome: 'Qwen 2.5 7B — equilibrado',
-    descricao: 'Melhor qualidade. Recomendado para máquinas com 16 GB de RAM ou mais.',
+    descricao: 'Bom equilíbrio entre qualidade e velocidade. Recomendado para a maioria dos casos.',
     // Trecho distintivo do nome do arquivo .gguf (o downloader adiciona prefixos como "hf_bartowski_")
     match: 'Qwen2.5-7B-Instruct-Q4_K_M',
     uri: 'hf:bartowski/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf',
@@ -102,6 +110,23 @@ async function baixarModelo(id) {
   return { ok: true };
 }
 
+// Remove o arquivo de um modelo baixado, liberando espaço em disco
+async function excluirModelo(id) {
+  const caminho = caminhoModelo(id);
+  if (!caminho) return { ok: true, jaRemovido: true };
+
+  // Se for o modelo carregado agora, descarrega antes de apagar
+  if (modeloCache?.id === id) {
+    if (chatState?.context) { try { await chatState.context.dispose(); } catch { /* noop */ } }
+    chatState = null;
+    try { await modeloCache.model.dispose(); } catch { /* noop */ }
+    modeloCache = null;
+  }
+
+  fs.unlinkSync(caminho);
+  return { ok: true };
+}
+
 // Garante o modelo carregado em memória (cacheado entre perguntas)
 async function garantirModelo(id) {
   const caminho = caminhoModelo(id);
@@ -122,7 +147,8 @@ async function prepararChat(id, contexto) {
 
   if (chatState?.context) { try { await chatState.context.dispose(); } catch { /* noop */ } }
 
-  const context = await model.createContext({ contextSize: { max: 8192 } });
+  // Janela grande o suficiente para todos os dados financeiros + conversa + resposta longa
+  const context = await model.createContext({ contextSize: { max: 16384 } });
   const systemPrompt = `${SYSTEM_PROMPT_CHAT}\n\n=== DADOS FINANCEIROS DO USUÁRIO ===\n${contexto}`;
   const session = new mod.LlamaChatSession({
     contextSequence: context.getSequence(),
@@ -132,10 +158,11 @@ async function prepararChat(id, contexto) {
   return { ok: true };
 }
 
-// Limite de tokens por resposta. Respostas longas (planos de alocação, por
-// exemplo) podem esbarrar nele — quando isso acontece avisamos o usuário em
-// vez de cortar o texto silenciosamente.
-const MAX_TOKENS_RESPOSTA = 1600;
+// Teto de segurança por resposta: existe para o modelo não entrar em loop
+// gerando texto indefinidamente, não para economizar. É folgado o bastante
+// para respostas longas; se ainda assim for atingido, o usuário é avisado
+// e pode continuar de onde parou.
+const MAX_TOKENS_RESPOSTA = 4096;
 
 async function gerar(entrada) {
   // Atenção: `response` é um array de segmentos; o texto puro vem em `responseText`.
@@ -173,6 +200,7 @@ module.exports = {
   setJanela,
   listarModelos,
   baixarModelo,
+  excluirModelo,
   prepararChat,
   perguntar,
   continuar,
