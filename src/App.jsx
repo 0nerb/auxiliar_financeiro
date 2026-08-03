@@ -7,6 +7,8 @@ import Cofrinhos from './Cofrinhos';
 import Analise from './Analise';
 import CarteiraInvestimentos from './CarteiraInvestimentos';
 import CarteiraConsolidada from './CarteiraConsolidada';
+import Login from './Login';
+import Backup from './Backup';
 import './App.css';
 
 // ----- ícones simples (SVG inline, herdam currentColor) -----
@@ -24,6 +26,7 @@ const IconChart = () => <Icon d="M3 3v18h18M7 15l3-4 3 3 4-6" />;
 const IconBuilding = () => <Icon d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" />;
 const IconLandmark = () => <Icon d="M3 21h18M4 10h16M5 6l7-3 7 3M6 10v11M10 10v11M14 10v11M18 10v11" />;
 const IconBitcoin = () => <Icon d="M9 7h5a2.5 2.5 0 0 1 0 5H9m0 0h6a2.5 2.5 0 0 1 0 5H9m0-10V5m0 12v2m3-14V5m0 12v2M9 7v10" />;
+const IconShield = () => <Icon d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />;
 const IconWallet = () => <Icon d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-2M21 12a2 2 0 0 0-2-2h-4a2 2 0 0 0 0 4h4a2 2 0 0 0 2-2zM15 12h.01" />;
 const IconSun = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -65,6 +68,7 @@ function useTituloRota() {
   if (pathname.startsWith('/tesouro'))   return { titulo: 'Tesouro Direto',      subtitulo: 'Seus títulos públicos e a variação desde a compra' };
   if (pathname.startsWith('/bitcoin'))   return { titulo: 'Bitcoin',             subtitulo: 'Sua posição em BTC e a variação desde a compra' };
   if (pathname.startsWith('/carteira'))  return { titulo: 'Carteira consolidada', subtitulo: 'Desempenho e alocação de todos os seus investimentos' };
+  if (pathname.startsWith('/backup'))    return { titulo: 'Backup',              subtitulo: 'Exporte uma cópia criptografada dos seus dados' };
   if (pathname.startsWith('/analise'))   return { titulo: 'Análise por IA',      subtitulo: 'Apontamentos sobre sua saúde financeira, gerados localmente' };
   return { titulo: 'Dashboard', subtitulo: 'Visão geral dos seus gastos e investimentos' };
 }
@@ -112,8 +116,11 @@ function Shell() {
         <NavLink to="/analise" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
           <IconSparkles /> Análise por IA
         </NavLink>
+        <NavLink to="/backup" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+          <IconShield /> Backup
+        </NavLink>
 
-        <div className="sidebar-footer">Auxiliar Financeiro v1.4</div>
+        <div className="sidebar-footer">Auxiliar Financeiro v1.5</div>
       </aside>
 
       <main className="main">
@@ -146,6 +153,7 @@ function Shell() {
           <Route path="/bitcoin" element={<CarteiraInvestimentos classe="bitcoin" rotulo="Bitcoin" />} />
           <Route path="/carteira" element={<CarteiraConsolidada />} />
           <Route path="/analise" element={<Analise />} />
+          <Route path="/backup" element={<Backup />} />
         </Routes>
       </main>
     </div>
@@ -153,6 +161,11 @@ function Shell() {
 }
 
 export default function App() {
+  // O app fica bloqueado até a senha destravar o banco criptografado
+  const [destravado, setDestravado] = useState(false);
+
+  if (!destravado) return <Login aoDestravar={() => setDestravado(true)} />;
+
   return (
     <HashRouter>
       <Shell />

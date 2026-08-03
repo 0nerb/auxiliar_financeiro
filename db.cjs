@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const Database = require('better-sqlite3');
+const Database = require('better-sqlite3-multiple-ciphers');
 
 let db = null;
 
@@ -173,15 +173,104 @@ function migrarDoJson(dbPath) {
   console.log(`[DB] Migração concluída: ${dados.transacoes?.length || 0} transações importadas do db.json.`);
 }
 
-function inicializar(userDataPath) {
+// Detecta um banco ainda em texto claro (arquivos SQLite começam com "SQLite format 3")
+function estaEmTextoClaro(dbPath) {
+  if (!fs.existsSync(dbPath)) return false;
+  const fd = fs.openSync(dbPath, 'r');
+  const buf = Buffer.alloc(16);
+  fs.readSync(fd, buf, 0, 16, 0);
+  fs.closeSync(fd);
+  return buf.toString('utf8').startsWith('SQLite format 3');
+}
+
+// Converte um banco em texto claro para cifrado, preservando os dados.
+// Trabalha numa cópia e só substitui o original após validar.
+// Retorna o caminho do backup temporário (em texto claro), que deve ser
+// apagado assim que o banco cifrado abrir com sucesso.
+function cifrarBancoExistente(dbPath, chave) {
+  const backup = `${dbPath}.backup-${Date.now()}`;
+  const temp = `${dbPath}.cifrando`;
+
+  // Consolida o WAL no arquivo principal antes de copiar
+  const plano = new Database(dbPath);
+  plano.pragma('wal_checkpoint(TRUNCATE)');
+  const contagem = plano.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get().n;
+  plano.close();
+
+  fs.copyFileSync(dbPath, backup);
+  fs.copyFileSync(dbPath, temp);
+
+  const alvo = new Database(temp);
+  alvo.pragma(`rekey='${chave}'`);
+  alvo.close();
+
+  // Valida a cópia cifrada antes de promovê-la
+  const verif = new Database(temp);
+  verif.pragma(`key='${chave}'`);
+  const contagemNova = verif.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table'").get().n;
+  verif.close();
+
+  if (contagemNova !== contagem) {
+    fs.unlinkSync(temp);
+    throw new Error('Falha ao criptografar o banco: os dados não conferem. Nada foi alterado.');
+  }
+
+  ['-wal', '-shm'].forEach(sufixo => {
+    const f = dbPath + sufixo;
+    if (fs.existsSync(f)) fs.unlinkSync(f);
+  });
+  fs.renameSync(temp, dbPath);
+  console.log('[DB] Banco criptografado com sucesso.');
+  return backup;
+}
+
+// Remove com sobrescrita os bytes de um arquivo antes de apagar,
+// para que o conteúdo em texto claro não fique recuperável no disco.
+function apagarComSobrescrita(arquivo) {
+  try {
+    if (!fs.existsSync(arquivo)) return;
+    const tamanho = fs.statSync(arquivo).size;
+    const fd = fs.openSync(arquivo, 'r+');
+    fs.writeSync(fd, crypto.randomBytes(tamanho), 0, tamanho, 0);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fs.unlinkSync(arquivo);
+  } catch (e) {
+    console.error('[DB] Não foi possível apagar o arquivo temporário:', e.message);
+  }
+}
+
+function inicializar(userDataPath, chave) {
+  if (!chave) throw new Error('O banco só pode ser aberto com a chave de criptografia.');
   const dbPath = path.join(userDataPath, 'financeiro.db');
+
+  let backupEmClaro = null;
+  if (estaEmTextoClaro(dbPath)) backupEmClaro = cifrarBancoExistente(dbPath, chave);
+
   db = new Database(dbPath);
+  db.pragma(`key='${chave}'`);
+  db.prepare('SELECT count(*) FROM sqlite_master').get(); // falha cedo se a chave estiver errada
   db.pragma('journal_mode = WAL');
+
+  // Banco cifrado abriu: o backup em texto claro não pode continuar no disco
+  if (backupEmClaro) {
+    apagarComSobrescrita(backupEmClaro);
+    console.log('[DB] Backup temporário em texto claro removido com segurança.');
+  }
   criarTabelas();
   semearCategorias();
   migrarDoJson(dbPath);
-  console.log('[DB] Banco SQLite operando em:', dbPath);
+  console.log('[DB] Banco SQLite (criptografado) operando em:', dbPath);
   return dbPath;
+}
+
+function estaAberto() {
+  return db !== null;
+}
+
+// Descarrega o WAL no arquivo principal (usado antes de exportar um backup)
+function consolidar() {
+  if (db) db.pragma('wal_checkpoint(TRUNCATE)');
 }
 
 // ---- Transações ----
@@ -437,10 +526,13 @@ function excluirCategoria(id) {
 
 function fechar() {
   if (db) db.close();
+  db = null;
 }
 
 module.exports = {
   inicializar,
+  estaAberto,
+  consolidar,
   listarTransacoes,
   inserirTransacao,
   atualizarTransacao,

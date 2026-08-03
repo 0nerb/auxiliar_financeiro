@@ -3,6 +3,18 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Expõe uma API segura para a interface (window.api), substituindo as
 // antigas chamadas fetch('http://localhost:3000/...') por IPC com o SQLite.
 contextBridge.exposeInMainWorld('api', {
+  // Autenticação / criptografia do banco
+  authStatus: () => ipcRenderer.invoke('auth:status'),
+  authCriar: (senha) => ipcRenderer.invoke('auth:criar', senha),
+  authDestravar: (senha) => ipcRenderer.invoke('auth:destravar', senha),
+  authRecuperar: (codigo) => ipcRenderer.invoke('auth:recuperar', codigo),
+  authRedefinirSenha: (novaSenha) => ipcRenderer.invoke('auth:redefinirSenha', novaSenha),
+
+  // Backup
+  exportarBackup: () => ipcRenderer.invoke('backup:exportar'),
+  importarBackup: () => ipcRenderer.invoke('backup:importar'),
+  revelarArquivo: (caminho) => ipcRenderer.invoke('backup:revelar', caminho),
+
   // Transações
   listarTransacoes: () => ipcRenderer.invoke('transacoes:listar'),
   inserirTransacao: (transacao) => ipcRenderer.invoke('transacoes:inserir', transacao),
