@@ -25,3 +25,10 @@ db.json
 *.sln
 *.sw?
 *.exe
+# Variáveis de ambiente (servidor web)
+.env
+.env.*
+!.env.example
+
+# Backups exportados pelo app
+*.afbackup

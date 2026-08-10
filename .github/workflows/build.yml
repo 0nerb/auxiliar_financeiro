@@ -12,6 +12,11 @@ jobs:
   # ---------- Instalador do Windows (.exe) ----------
   windows:
     runs-on: windows-latest
+    # O app desktop vive em desktop/ (a raiz é o monorepo).
+    # A interface em shared/ é puxada pelo Vite via alias.
+    defaults:
+      run:
+        working-directory: desktop
     steps:
       - name: Baixar o código
         uses: actions/checkout@v4
@@ -21,6 +26,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: desktop/package-lock.json
 
       - name: Instalar dependências
         run: npm ci
@@ -32,5 +38,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: instalador-windows
-          path: release/*.exe
+          path: desktop/release/*.exe
           if-no-files-found: error

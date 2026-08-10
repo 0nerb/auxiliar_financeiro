@@ -1,16 +1,57 @@
-# React + Vite
+# Auxiliar Financeiro
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Controle financeiro pessoal: contas, gastos parcelados, ganhos, cofrinhos e
+carteira de investimentos (ações, FIIs, Tesouro Direto e Bitcoin), com análise
+por IA rodando localmente.
 
-Currently, two official plugins are available:
+O repositório abriga **duas versões do mesmo aplicativo**, que compartilham a
+interface:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+```
+.
+├── shared/         Telas e regras em React, usadas pelas duas versões
+├── desktop/        Aplicativo para Windows e macOS (Electron)
+└── web/            Versão para navegador (em construção)
+```
 
-## React Compiler
+## Como as versões se relacionam
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Toda a interface conversa com o backend por um único objeto: **`window.api`**.
+É essa a fronteira entre o que é comum e o que é específico de cada versão.
 
-## Expanding the ESLint configuration
+| | Desktop | Web |
+|---|---|---|
+| `window.api` | IPC do Electron | Chamadas HTTP à API |
+| Dados | SQLite local criptografado | Banco no servidor |
+| Acesso | Senha local (chave de criptografia) | Contas de usuário |
+| IA | Modelo rodando na máquina | Não prevista por ora |
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Trocando a implementação de `window.api`, as mesmas telas funcionam nos dois
+ambientes.
+
+## Desktop
+
+```bash
+cd desktop
+npm install
+npm run electron:dev     # roda em desenvolvimento
+```
+
+Outros comandos: `npm run build` (compila a interface), `npm run dist:mac` e
+`npm run dist:win` (geram os instaladores em `desktop/release`).
+
+O `.exe` de cada versão é gerado automaticamente pelo GitHub Actions a cada
+push na `main` — veja a aba **Actions**.
+
+> Alterações em `shared/` e `desktop/src` recarregam sozinhas. Mudanças nos
+> arquivos `.cjs` (processo principal do Electron) exigem reiniciar o app.
+
+## Web
+
+Ainda não implementada. Veja [`web/README.md`](web/README.md) para o plano.
+
+## Documentação por pasta
+
+- [`shared/README.md`](shared/README.md) — o que vive no código compartilhado
+- [`desktop/README.md`](desktop/README.md) — arquitetura do aplicativo desktop
+- [`web/README.md`](web/README.md) — plano da versão web

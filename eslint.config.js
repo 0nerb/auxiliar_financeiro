@@ -1,21 +1,4 @@
-import js from '@eslint/js'
-import globals from 'globals'
-import reactHooks from 'eslint-plugin-react-hooks'
-import reactRefresh from 'eslint-plugin-react-refresh'
-import { defineConfig, globalIgnores } from 'eslint/config'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{js,jsx}'],
-    extends: [
-      js.configs.recommended,
-      reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
-    ],
-    languageOptions: {
-      globals: globals.browser,
-      parserOptions: { ecmaFeatures: { jsx: true } },
-    },
-  },
-])
+// A configuração real vive em desktop/eslint.config.js — os plugins do ESLint
+// são resolvidos a partir de lá, onde está o node_modules do projeto.
+// Este arquivo na raiz permite lintar shared/ e desktop/ de uma vez só.
+export { default } from './desktop/eslint.config.js'
