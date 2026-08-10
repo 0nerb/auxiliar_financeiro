@@ -40,3 +40,7 @@ jobs:
           name: instalador-windows
           path: desktop/release/*.exe
           if-no-files-found: error
+          # Cada instalador ocupa centenas de MB. Sem prazo de validade a cota
+          # de armazenamento do GitHub estoura e novos envios passam a falhar.
+          # Baixe o .exe que quiser guardar — depois desse prazo ele é removido.
+          retention-days: 14
