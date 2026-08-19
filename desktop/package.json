@@ -1,7 +1,7 @@
 {
   "name": "auxiliar-financeiro-desktop",
   "private": true,
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Auxiliar financeiro pessoal para controle de contas e gastos.",
   "author": "Breno Kern Rangel",
   "main": "main.cjs",
@@ -42,7 +42,8 @@
     "appId": "com.breno.auxiliarfinanceiro",
     "productName": "Auxiliar Financeiro",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "asar": true,
     "asarUnpack": [
@@ -57,10 +58,12 @@
       "node_modules/**/*"
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.ico"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "build/icon.icns"
     }
   }
 }

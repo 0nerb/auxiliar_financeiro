@@ -6,6 +6,12 @@ const mercado = require('./mercado.cjs');
 const cripto = require('./cripto.cjs');
 const backup = require('./backup.cjs');
 
+// Fixa o nome usado para a pasta de dados do usuário.
+// O Electron derivaria esse nome do campo "name" do package.json, o que faria
+// os dados "desaparecerem" caso o pacote fosse renomeado. Definir aqui garante
+// que o banco e as configurações continuem sempre no mesmo lugar.
+app.setName('auxiliar-financeiro');
+
 // Chave de criptografia da sessão — vive apenas em memória, nunca é salva.
 let dekSessao = null;
 
