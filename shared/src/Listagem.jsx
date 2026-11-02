@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
-import { MESES, apareceNoPeriodo, anosDisponiveis, chavePago } from './periodo';
+import { MESES, apareceNoPeriodo, anosDisponiveis, chavePago, anoReferenteDe } from './periodo';
 import { useConfirm } from './confirmContext';
+import EditarLancamento from './EditarLancamento';
 
 export default function Listagem() {
   const confirmar = useConfirm();
@@ -8,18 +9,40 @@ export default function Listagem() {
   const [ganhos, setGanhos] = useState([]);
   const [mesSelecionado, setMesSelecionado] = useState(() => MESES[new Date().getMonth()]);
   const [anoSelecionado, setAnoSelecionado] = useState(() => new Date().getFullYear());
+  const [categorias, setCategorias] = useState([]);
+  const [editando, setEditando] = useState(null); // transação aberta no modal de edição
+
+  const ordenarRecentes = (lista) => [...lista].sort((a, b) => new Date(b.data) - new Date(a.data));
+
+  // Parcelas de uma mesma compra, em ordem cronológica de mês referente
+  const indiceMes = (t) => anoReferenteDe(t) * 12 + MESES.indexOf(t.mesReferente);
+  const parcelasDoGrupo = (lista, grupoId) =>
+    lista.filter(t => t.grupoId === grupoId).sort((a, b) => indiceMes(a) - indiceMes(b));
+
+  // Até onde o número da parcela pode ir sem estourar o total nos meses seguintes.
+  // Ex.: 3ª linha de 10 parcelas, com 7 meses pela frente → no máximo 3.
+  const limitesParcelaDe = (t) => {
+    if (!t.grupoId || !(t.parcelas > 1)) return null;
+    const irmas = parcelasDoGrupo(transacoes, t.grupoId);
+    const idx = irmas.findIndex(x => x.id === t.id);
+    if (idx < 0) return null;
+    const posteriores = irmas.length - 1 - idx;
+    return { min: 1, max: Math.max(1, t.parcelas - posteriores) };
+  };
 
   useEffect(() => {
     let ativo = true;
     (async () => {
       try {
-        const [trans, gans] = await Promise.all([
+        const [trans, gans, cats] = await Promise.all([
           window.api.listarTransacoes(),
-          window.api.listarGanhos()
+          window.api.listarGanhos(),
+          window.api.listarCategorias()
         ]);
         if (!ativo) return;
         setTransacoes(trans.sort((a, b) => new Date(b.data) - new Date(a.data)));
         setGanhos(gans);
+        setCategorias(cats.map(c => c.nome ?? c));
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
       }
@@ -45,38 +68,122 @@ export default function Listagem() {
     }
   };
 
+  const handleSalvarEdicao = async (campos, aplicarNoGrupo) => {
+    const alvo = editando;
+    // Categoria, valor, forma e comentário descrevem a compra; data, mês e
+    // número da parcela são próprios de cada linha.
+    const { categoria, valor, formaPagamento, comentario, ...soDestaLinha } = campos;
+
+    if (aplicarNoGrupo && alvo.grupoId) {
+      await window.api.atualizarGrupo(alvo.grupoId, { categoria, valor, formaPagamento, comentario });
+      await window.api.atualizarTransacao(alvo.id, soDestaLinha);
+    } else {
+      await window.api.atualizarTransacao(alvo.id, campos);
+    }
+
+    let atualizadas = await window.api.listarTransacoes();
+
+    // Mudar o número da parcela desloca as parcelas dos meses seguintes, para a
+    // sequência não quebrar: virar 3/10 em 2/10 faz o mês seguinte ser 3/10.
+    // Os meses anteriores ficam como estão.
+    const mudouParcela = campos.parcelaAtual != null && campos.parcelaAtual !== alvo.parcelaAtual;
+    if (mudouParcela && alvo.grupoId) {
+      const irmas = parcelasDoGrupo(atualizadas, alvo.grupoId);
+      const idx = irmas.findIndex(x => x.id === alvo.id);
+      if (idx >= 0) {
+        const pares = irmas.slice(idx).map((t, i) => ({ id: t.id, parcelaAtual: campos.parcelaAtual + i }));
+        await window.api.renumerarParcelas(pares);
+        atualizadas = await window.api.listarTransacoes();
+      }
+    }
+
+    setTransacoes(ordenarRecentes(atualizadas));
+    setEditando(null);
+  };
+
+  // Irmãs de um parcelamento antigo (sem grupoId), casadas pelas características da compra
+  const irmasSemGrupo = (transacao) => transacoes.filter(t =>
+    !t.grupoId &&
+    t.tipo === transacao.tipo &&
+    t.parcelas === transacao.parcelas &&
+    t.categoria === transacao.categoria &&
+    t.valor === transacao.valor &&
+    t.formaPagamento === transacao.formaPagamento &&
+    (t.comentario || '') === (transacao.comentario || '')
+  );
+
   const handleExcluirOuCancelar = async (transacao) => {
     const ehParcelamento = transacao.tipo === 'Entradas no cartão' && transacao.parcelas > 1;
 
     try {
       if (transacao.tipo === 'Gastos mensais fixos') {
-        // Gasto fixo: cancela a partir deste mês/ano (some daqui para frente, preserva o passado)
-        if (!(await confirmar(`Encerrar este gasto fixo a partir de ${mesSelecionado}/${anoSelecionado}?`))) return;
-        await window.api.atualizarTransacao(transacao.id, { mesFim: mesSelecionado, anoFim: anoSelecionado });
-        setTransacoes(prev => prev.map(t => t.id === transacao.id ? { ...t, mesFim: mesSelecionado, anoFim: anoSelecionado } : t));
-      } else if (ehParcelamento && transacao.grupoId) {
-        // Parcelado (novo): remove a compra inteira de uma vez pelo grupo
-        if (!(await confirmar(`Esta é uma compra parcelada em ${transacao.parcelas}x. Remover TODAS as ${transacao.parcelas} parcelas de uma vez?`))) return;
-        await window.api.excluirGrupo(transacao.grupoId);
-        setTransacoes(prev => prev.filter(t => t.grupoId !== transacao.grupoId));
+        const escolha = await confirmar({
+          mensagem: 'Este é um gasto fixo, que se repete todos os meses. O que você quer fazer?',
+          opcoes: [
+            {
+              chave: 'encerrar',
+              rotulo: `Encerrar a partir de ${mesSelecionado}/${anoSelecionado}`,
+              descricao: 'Some deste mês em diante e preserva o histórico já registrado.'
+            },
+            {
+              chave: 'tudo',
+              rotulo: 'Excluir de todos os meses',
+              descricao: 'Apaga o gasto por completo, inclusive dos meses anteriores.',
+              perigo: true
+            }
+          ]
+        });
+        if (!escolha) return;
+
+        if (escolha === 'encerrar') {
+          await window.api.atualizarTransacao(transacao.id, { mesFim: mesSelecionado, anoFim: anoSelecionado });
+          setTransacoes(prev => prev.map(t => t.id === transacao.id
+            ? { ...t, mesFim: mesSelecionado, anoFim: anoSelecionado } : t));
+        } else {
+          await window.api.excluirTransacao(transacao.id);
+          setTransacoes(prev => prev.filter(t => t.id !== transacao.id));
+        }
+
       } else if (ehParcelamento) {
-        // Parcelado (dado antigo, sem grupo): casa as parcelas irmãs pelas características da compra
-        const irmaos = transacoes.filter(t =>
-          !t.grupoId &&
-          t.tipo === transacao.tipo &&
-          t.parcelas === transacao.parcelas &&
-          t.categoria === transacao.categoria &&
-          t.valor === transacao.valor &&
-          t.formaPagamento === transacao.formaPagamento &&
-          (t.comentario || '') === (transacao.comentario || '')
-        );
-        if (!(await confirmar(`Compra parcelada em ${transacao.parcelas}x. Foram encontradas ${irmaos.length} parcelas semelhantes. Remover todas de uma vez?`))) return;
-        await Promise.all(irmaos.map(t => window.api.excluirTransacao(t.id)));
-        const idsRemovidos = new Set(irmaos.map(t => t.id));
-        setTransacoes(prev => prev.filter(t => !idsRemovidos.has(t.id)));
+        const comGrupo = !!transacao.grupoId;
+        const irmas = comGrupo ? parcelasDoGrupo(transacoes, transacao.grupoId) : irmasSemGrupo(transacao);
+        const rotuloParcela = transacao.parcelaAtual
+          ? `a parcela ${transacao.parcelaAtual}/${transacao.parcelas}`
+          : 'esta parcela';
+
+        const escolha = await confirmar({
+          mensagem: `Esta compra está parcelada em ${transacao.parcelas}x. O que você quer remover?`,
+          opcoes: [
+            {
+              chave: 'uma',
+              rotulo: `Somente ${rotuloParcela}`,
+              descricao: 'As outras parcelas continuam como estão.'
+            },
+            {
+              chave: 'todas',
+              rotulo: `Todas as ${irmas.length} parcelas da compra`,
+              descricao: 'Remove a compra inteira, de todos os meses.',
+              perigo: true
+            }
+          ]
+        });
+        if (!escolha) return;
+
+        if (escolha === 'uma') {
+          await window.api.excluirTransacao(transacao.id);
+          setTransacoes(prev => prev.filter(t => t.id !== transacao.id));
+        } else if (comGrupo) {
+          await window.api.excluirGrupo(transacao.grupoId);
+          setTransacoes(prev => prev.filter(t => t.grupoId !== transacao.grupoId));
+        } else {
+          await Promise.all(irmas.map(t => window.api.excluirTransacao(t.id)));
+          const removidos = new Set(irmas.map(t => t.id));
+          setTransacoes(prev => prev.filter(t => !removidos.has(t.id)));
+        }
+
       } else {
         // Transação avulsa
-        if (!(await confirmar("Deseja remover este registro de contas?"))) return;
+        if (!(await confirmar('Deseja remover este registro de contas?'))) return;
         await window.api.excluirTransacao(transacao.id);
         setTransacoes(prev => prev.filter(t => t.id !== transacao.id));
       }
@@ -223,7 +330,16 @@ export default function Listagem() {
                       </button>
                     </td>
                     <td style={{ color: 'var(--color-text-secondary)', fontSize: '0.85rem' }}>{t.comentario || '—'}</td>
-                    <td style={{ textAlign: 'center' }}>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <button
+                        onClick={() => setEditando(t)}
+                        title="Editar"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-secondary)', display: 'inline-flex', marginRight: '0.4rem' }}
+                      >
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                        </svg>
+                      </button>
                       <button
                         onClick={() => handleExcluirOuCancelar(t)}
                         title="Remover"
@@ -240,6 +356,17 @@ export default function Listagem() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {editando && (
+        <EditarLancamento
+          transacao={editando}
+          limitesParcela={limitesParcelaDe(editando)}
+          categorias={categorias}
+          anos={anosDisp}
+          onSalvar={handleSalvarEdicao}
+          onFechar={() => setEditando(null)}
+        />
       )}
     </div>
   );

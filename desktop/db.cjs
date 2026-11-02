@@ -308,16 +308,28 @@ function inserirTransacao(t, idExistente) {
 }
 
 // Atualização parcial — aceita apenas campos conhecidos
+// Campos que a edição de um lançamento pode alterar.
+// Os de PARCELA_COMPARTILHADA descrevem a compra inteira e podem ser aplicados
+// a todas as parcelas de uma vez; os demais são próprios de cada linha.
+const CAMPOS_EDITAVEIS = {
+  mesesPagos: v => JSON.stringify(v),
+  mesFim: v => v,
+  anoFim: v => v,
+  pago: v => (v ? 1 : 0),
+  comentario: v => v,
+  categoria: v => v,
+  valor: v => Number(v),
+  data: v => v,
+  formaPagamento: v => v,
+  mesReferente: v => v,
+  anoReferente: v => (v == null ? null : parseInt(v, 10)),
+  parcelaAtual: v => (v == null ? null : parseInt(v, 10))
+};
+
+const PARCELA_COMPARTILHADA = ['categoria', 'valor', 'comentario', 'formaPagamento'];
+
 function atualizarTransacao(id, campos) {
-  const permitidos = {
-    mesesPagos: v => JSON.stringify(v),
-    mesFim: v => v,
-    anoFim: v => v,
-    pago: v => (v ? 1 : 0),
-    comentario: v => v,
-    categoria: v => v,
-    valor: v => v
-  };
+  const permitidos = CAMPOS_EDITAVEIS;
 
   const sets = [];
   const valores = {};
@@ -332,6 +344,43 @@ function atualizarTransacao(id, campos) {
   valores.id = id;
   db.prepare(`UPDATE transacoes SET ${sets.join(', ')} WHERE id = @id`).run(valores);
   return mapearTransacao(db.prepare('SELECT * FROM transacoes WHERE id = ?').get(id));
+}
+
+// Aplica a todas as parcelas de uma compra os campos que descrevem a compra
+// inteira (categoria, valor, forma e comentário). Mês, data e número da
+// parcela são próprios de cada linha e por isso ficam de fora.
+function atualizarGrupo(grupoId, campos) {
+  const sets = [];
+  const valores = {};
+  for (const chave of PARCELA_COMPARTILHADA) {
+    if (chave in campos) {
+      sets.push(`${chave} = @${chave}`);
+      valores[chave] = CAMPOS_EDITAVEIS[chave](campos[chave]);
+    }
+  }
+  if (sets.length === 0) return listarTransacoesDoGrupo(grupoId);
+
+  valores.grupoId = grupoId;
+  db.prepare(`UPDATE transacoes SET ${sets.join(', ')} WHERE grupoId = @grupoId`).run(valores);
+  return listarTransacoesDoGrupo(grupoId);
+}
+
+// Renumera parcelas em lote, numa única transação para não deixar a sequência
+// pela metade se algo falhar. A ordem cronológica é decidida na interface,
+// que é quem conhece a ordem dos meses — aqui só se aplicam os pares prontos.
+function renumerarParcelas(pares) {
+  const atualizar = db.prepare('UPDATE transacoes SET parcelaAtual = @parcelaAtual WHERE id = @id');
+  const emLote = db.transaction((lista) => {
+    for (const { id, parcelaAtual } of lista) {
+      atualizar.run({ id, parcelaAtual: parseInt(parcelaAtual, 10) });
+    }
+  });
+  emLote(pares);
+  return { atualizados: pares.length };
+}
+
+function listarTransacoesDoGrupo(grupoId) {
+  return db.prepare('SELECT * FROM transacoes WHERE grupoId = ?').all(grupoId).map(mapearTransacao);
 }
 
 function excluirTransacao(id) {
@@ -536,6 +585,8 @@ module.exports = {
   listarTransacoes,
   inserirTransacao,
   atualizarTransacao,
+  atualizarGrupo,
+  renumerarParcelas,
   excluirTransacao,
   excluirGrupo,
   listarGanhos,

@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('api', {
   inserirTransacao: (transacao) => ipcRenderer.invoke('transacoes:inserir', transacao),
   atualizarTransacao: (id, campos) => ipcRenderer.invoke('transacoes:atualizar', id, campos),
   excluirTransacao: (id) => ipcRenderer.invoke('transacoes:excluir', id),
+  renumerarParcelas: (pares) => ipcRenderer.invoke('transacoes:renumerarParcelas', pares),
+  atualizarGrupo: (grupoId, campos) => ipcRenderer.invoke('transacoes:atualizarGrupo', grupoId, campos),
   excluirGrupo: (grupoId) => ipcRenderer.invoke('transacoes:excluirGrupo', grupoId),
 
   // Ganhos (renda por mês)

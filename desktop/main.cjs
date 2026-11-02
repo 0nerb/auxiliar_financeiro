@@ -105,6 +105,8 @@ function registrarHandlers() {
   ipcMain.handle('transacoes:inserir', comBanco((_e, transacao) => db.inserirTransacao(transacao)));
   ipcMain.handle('transacoes:atualizar', comBanco((_e, id, campos) => db.atualizarTransacao(id, campos)));
   ipcMain.handle('transacoes:excluir', comBanco((_e, id) => db.excluirTransacao(id)));
+  ipcMain.handle('transacoes:renumerarParcelas', comBanco((_e, pares) => db.renumerarParcelas(pares)));
+  ipcMain.handle('transacoes:atualizarGrupo', comBanco((_e, grupoId, campos) => db.atualizarGrupo(grupoId, campos)));
   ipcMain.handle('transacoes:excluirGrupo', comBanco((_e, grupoId) => db.excluirGrupo(grupoId)));
 
   ipcMain.handle('ganhos:listar', comBanco(() => db.listarGanhos()));
